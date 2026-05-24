@@ -1,98 +1,385 @@
-cd /home/claude && node -e '
-const fs = require("fs");
-const exec = require("child_process").execSync;
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Painel de Métricas Operacionais — SDR</title>
+  <style>
+    :root {
+      --bg: #030712;
+      --panel-bg: #0b0f19;
+      --border: #1f293d;
+      --text: #f3f4f6;
+      --muted: #9ca3af;
+      --accent: #00e5a0;
+      --accent2: #0066ff;
+      --warn: #ffb703;
+      --danger: #ff2d55;
+      --mono: 'Courier New', Courier, monospace;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background-color: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 20px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; margin-top: 20px; }
+    .panel { background: var(--panel-bg); border: 1px solid var(--border); border-radius: 12px; display: flex; flex-direction: column; overflow: hidden; }
+    .panel-header { padding: 14px 18px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+    .panel-title { font-size: 14px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+    .panel-badge { font-size: 10px; font-family: var(--mono); padding: 2px 8px; border-radius: 4px; background: rgba(255,255,255,0.05); }
+    .panel-body { padding: 18px; flex: 1; }
+    .form-group { margin-bottom: 12px; }
+    .form-label { display: block; font-size: 11px; color: var(--muted); margin-bottom: 4px; font-family: var(--mono); }
+    .form-input, .form-select { width: 100%; background: #111827; border: 1px solid var(--border); border-radius: 6px; padding: 8px 12px; color: #fff; font-size: 12px; }
+    .form-input:focus, .form-select:focus { border-color: var(--accent); outline: none; }
+    .btn-group { display: flex; gap: 8px; margin-top: 10px; }
+    button { cursor: pointer; border: none; font-weight: 500; border-radius: 6px; padding: 8px 16px; font-size: 12px; transition: all 0.2s; }
+    .btn-primary { background: var(--accent); color: #000; }
+    .btn-secondary { background: #1f293d; color: var(--text); }
+    .btn-danger { background: rgba(255,45,85,0.1); color: var(--danger); border: 1px solid rgba(255,45,85,0.2); }
+    .empty-state { text-align: center; color: var(--muted); padding: 30px 10px; }
+    .empty-sub { font-size: 11px; font-family: var(--mono); margin-top: 4px; }
+    .call-item { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,0.03); }
+    .call-avatar { width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 11px; color: #fff; }
+    .call-info { flex: 1; min-width: 0; }
+    .call-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px; }
+    .call-name { font-size: 12px; font-weight: 500; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .call-time { font-size: 10px; color: var(--muted); font-family: var(--mono); }
+    .call-meta { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .call-tags { display: flex; gap: 4px; margin-top: 4px; flex-wrap: wrap; }
+    .tag { font-size: 9px; padding: 1px 5px; border-radius: 3px; font-family: var(--mono); font-weight: bold; }
+    .tag-warn { background: rgba(255,183,3,0.1); color: var(--warn); }
+    .tag-ms { background: rgba(0,102,255,0.1); color: #0066ff; }
+  </style>
+</head>
+<body>
 
-try {
-    let content = fs.readFileSync("sdr_base.html", "utf8");
+  <h2 style="font-size:18px; font-weight:500;">Configurações e Monitoramento Operacional</h2>
 
-    // 1. Substituição do Bloco HTML do Painel WhatsApp
-    const old_wa_html = `<div class="panel">
-          <div class="panel-header">
-            <div class="panel-title">WhatsApp — Ao Vivo</div>
-            <div style="display:flex;align-items:center;gap:8px">
-              <div id="waChipStatus" class="panel-badge" style="cursor:pointer" onclick="checkAllChips()">VERIFICANDO...</div>
-              <button class="btn-secondary btn-sm" style="font-size:9px" onclick="loadWAConversations()">↺</button>
-            </div>
-          </div>
-          <div id="waChipBar" style="padding:8px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:10px">
-            <span style="color:var(--muted)">Chip:</span>
-            <span id="waChipName" style="color:var(--muted)">—</span>
-          </div>
-          <div class="panel-body" style="padding:0 18px;max-height:280px;overflow-y:auto" id="waDashConvList">
-            <div class="empty-state" style="padding:20px"><div class="empty-sub">Configure a Evolution API para ver conversas.</div></div>
-          </div>
-        </div>`;
-
-    const new_wa_html = `<div class="panel">
-          <div class="panel-header">
-            <div class="panel-title">WhatsApp — Ao Vivo</div>
-            <div style="display:flex;align-items:center;gap:8px">
-              <div id="waChipStatus" class="panel-badge" style="cursor:pointer" onclick="checkAllChips()">VERIFICANDO...</div>
-              <button class="btn-secondary btn-sm" style="font-size:9px" onclick="checkAllChips()">↺</button>
-            </div>
-          </div>
-          <div style="padding:10px 18px;border-bottom:1px solid var(--border);display:flex;flex-direction:column;gap:8px;font-family:var(--mono);font-size:10px">
-            <div style="display:flex;align-items:center;gap:8px">
-              <span style="color:var(--muted);white-space:nowrap">SDR:</span>
-              <select id="waSDRFilter" class="form-select" style="flex:1;padding:4px 8px;font-size:10px" onchange="onSDRFilterChange()">
-                <option value="all">Todos</option>
-              </select>
-              <span style="color:var(--muted);white-space:nowrap">Chip:</span>
-              <select id="waChipFilter" class="form-select" style="flex:1;padding:4px 8px;font-size:10px" onchange="loadWAConversations()">
-                <option value="">— configure —</option>
-              </select>
-            </div>
-            <div id="waChipStatusRow" style="display:flex;gap:6px;flex-wrap:wrap;min-height:16px"></div>
-          </div>
-          <div class="panel-body" style="padding:0 18px;max-height:240px;overflow-y:auto" id="waDashConvList">
-            <div class="empty-state" style="padding:20px"><div class="empty-sub">Configure a Evolution API e clique em ↺</div></div>
-          </div>
-        </div>`;
-
-    // Normaliza espaçamentos simples para evitar falha no replace de HTML
-    let tempContent = content.replace(/\s+/g, " ");
-    let tempOldHtml = old_wa_html.replace(/\s+/g, " ");
+  <div class="grid">
     
-    if (tempContent.includes(tempOldHtml)) {
-        // Localiza os índices reais no arquivo para manter a formatação intacta
-        const startIdx = tempContent.indexOf(tempOldHtml);
-        // Aplica a substituição cirúrgica baseada em trechos únicos das pontas se falhar por quebra de linha
-        content = content.replace(content.substring(content.indexOf("<div class=\\"panel-title\\">WhatsApp — Ao Vivo</div>").toString().indexOf("<div class=\\"panel\\">"), content.indexOf("Nconfigure a Evolution API para ver conversas.</div></div> </div> </div>")), new_wa_html);
-    } else {
-        // Fallback direto por string padrão de segurança
-        content = content.split(old_wa_html).join(new_wa_html);
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">Configurações Base</div>
+      </div>
+      <div class="panel-body">
+        <div class="form-group">
+          <label class="form-label">Evolution API URL</label>
+          <input type="text" id="cfgEvoUrl" class="form-input" placeholder="https://api.seudominio.com">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Global API Key</label>
+          <input type="password" id="cfgEvoToken" class="form-input" placeholder="Sua apikey global">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Instância Padrão (Fallback)</label>
+          <input type="text" id="cfgEvoInstance" class="form-input" placeholder="Ex: SDR_01">
+        </div>
+        <div class="btn-group">
+          <button class="btn-primary" onclick="saveSystemConfig()">Salvar Configurações</button>
+          <button class="btn-secondary" onclick="testEvolutionConnection()">Testar API</button>
+        </div>
+        <div id="testResult" style="margin-top:10px; font-size:11px; font-family:var(--mono);"></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">Mapeamento SDR ➜ Chip</div>
+        <button class="btn-secondary" style="padding:2px 8px; font-size:10px" onclick="addSDRMapping()">+ Add</button>
+      </div>
+      <div class="panel-body" style="display:flex; flex-direction:column; gap:10px;">
+        <div id="sdrChipMappingList" style="display:flex; flex-direction:column; gap:8px; max-height:200px; overflow-y:auto;">
+          </div>
+        <button class="btn-primary" style="margin-top:auto;" onclick="saveSDRMappings()">Salvar Mapeamentos</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">WhatsApp — Ao Vivo</div>
+        <div style="display:flex; align-items:center; gap:8px">
+          <div id="waChipStatus" class="panel-badge" style="cursor:pointer" onclick="checkAllChips()">VERIFICANDO...</div>
+          <button class="btn-secondary" style="padding:2px 6px; font-size:10px" onclick="checkAllChips()">↺</button>
+        </div>
+      </div>
+      
+      <div style="padding:10px 18px; border-bottom:1px solid var(--border); display:flex; flex-direction:column; gap:8px; font-family:var(--mono); font-size:10px">
+        <div style="display:flex; align-items:center; gap:8px">
+          <span style="color:var(--muted); white-space:nowrap">SDR:</span>
+          <select id="waSDRFilter" class="form-select" style="flex:1; padding:4px 8px; font-size:10px" onchange="onSDRFilterChange()">
+            <option value="all">Todos</option>
+          </select>
+          
+          <span style="color:var(--muted); white-space:nowrap">Chip:</span>
+          <select id="waChipFilter" class="form-select" style="flex:1; padding:4px 8px; font-size:10px" onchange="loadWAConversations()">
+            <option value="">— configure —</option>
+          </select>
+        </div>
+        <div id="waChipStatusRow" style="display:flex; gap:6px; flex-wrap:wrap; min-height:16px"></div>
+      </div>
+
+      <div class="panel-body" style="padding:0 18px; max-height:240px; overflow-y:auto" id="waDashConvList">
+        <div class="empty-state" style="padding:20px">
+          <div class="empty-sub">Insira as configurações e clique no botão de atualizar (↺).</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    let config = JSON.parse(localStorage.getItem('app_config') || '{}');
+    let sdrMappings = JSON.parse(localStorage.getItem('sdr_mappings') || '[]');
+    let availableInstances = [];
+
+    // Inicia a tela preenchendo os campos salvos
+    window.addEventListener('DOMContentLoaded', () => {
+      if(config.evolutionUrl) document.getElementById('cfgEvoUrl').value = config.evolutionUrl;
+      if(config.evolutionToken) document.getElementById('cfgEvoToken').value = config.evolutionToken;
+      if(config.evolutionInstance) document.getElementById('cfgEvoInstance').value = config.evolutionInstance;
+      checkAllChips();
+    });
+
+    function saveSystemConfig() {
+      config = {
+        evolutionUrl: document.getElementById('cfgEvoUrl').value.trim(),
+        evolutionToken: document.getElementById('cfgEvoToken').value.trim(),
+        evolutionInstance: document.getElementById('cfgEvoInstance').value.trim()
+      };
+      localStorage.setItem('app_config', JSON.stringify(config));
+      alert('Configurações base salvas com sucesso!');
+      checkAllChips();
     }
 
-    // 2. Substituição do Bloco JavaScript Antigo pelo Novo com Proxy e Console Logs
-    const startJsMarker = "// ====================================================================\n// EVOLUTION — chamada direta\n// ====================================================================";
-    const endJsMarker = "resultEl.textContent = '" + "Status \"' + instance + '\": ' + (data.state || JSON.stringify(data));\n  } catch(e) { resultEl.style.color=\'var(--danger)\'; resultEl.textContent=\'\\u2717 \'+e.message; }\n}";
-
-    const new_evo_section = `// ====================================================================
-// EVOLUTION — via proxy Vercel (/api/proxy service:'evolution')
-// ====================================================================
-function evoHeaders() {
-  return { 'Content-Type': 'application/json', 'apikey': config.evolutionToken };
-}
-async function evoFetch(path, options = {}) {
-  const base = (config.evolutionUrl || '').replace(/\\/$/, '');
-  if (!base) throw new Error('URL da Evolution não configurada');
-  if (!config.evolutionToken) throw new Error('API Key da Evolution não configurada');
-  console.log('[EvoFetch] Proxy requisitando:', path);
-  const res = await fetch('/api/proxy', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      service: 'evolution',
-      payload: {
-        baseUrl: base,
-        apiKeyEvo: config.evolutionToken,
-        endpoint: path,
-        method: options.method || 'GET',
-        body: options.body ? JSON.parse(options.body) : undefined
+    // Abstração centralizada enviando requisições pelo Serverless Proxy da Vercel
+    async function evoFetch(path, options = {}) {
+      const base = (config.evolutionUrl || '').replace(/\/$/, '');
+      if (!base || !config.evolutionToken) {
+        throw new Error('URL ou Token da Evolution ausentes nas configurações.');
       }
-    })
-  });
-  const data = await res.json().catch(() => ({}));
-  return { ok: res.ok, status: res.status, json: async () => data };
-}
-async function _testEvolution(resultEl) {
+      
+      console.log('[Proxy Request] Direcionando para o endpoint:', path);
+
+      const res = await fetch('/api/proxy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          service: 'evolution',
+          payload: {
+            baseUrl: base,
+            apiKeyEvo: config.evolutionToken,
+            endpoint: path,
+            method: options.method || 'GET',
+            body: options.body ? JSON.parse(options.body) : undefined
+          }
+        })
+      });
+
+      const data = await res.json().catch(() => ({}));
+      return { ok: res.ok, status: res.status, json: async () => data };
+    }
+
+    async function testEvolutionConnection() {
+      const resultEl = document.getElementById('testResult');
+      resultEl.textContent = '⏳ Conectando via proxy...';
+      resultEl.style.color = 'var(--warn)';
+      
+      try {
+        const res = await evoFetch('/instance/fetchInstances');
+        const data = await res.json();
+        if (res.ok) {
+          const list = Array.isArray(data) ? data : (data.data || []);
+          resultEl.style.color = 'var(--accent)';
+          resultEl.textContent = '✓ Conexão bem-sucedida! Instâncias encontradas: ' + list.length;
+        } else {
+          throw new Error('Retorno HTTP ' + res.status);
+        }
+      } catch(e) {
+        console.error('[Erro de conexão]:', e);
+        resultEl.style.color = 'var(--danger)';
+        resultEl.textContent = '✗ Falha: ' + e.message;
+      }
+    }
+
+    async function checkAllChips() {
+      const chipStatus = document.getElementById('waChipStatus');
+      const chipFilterEl = document.getElementById('waChipFilter');
+      const chipStatusRow = document.getElementById('waChipStatusRow');
+      const sdrFilterEl = document.getElementById('waSDRFilter');
+
+      if (!config.evolutionUrl || !config.evolutionToken) {
+        if (chipStatus) chipStatus.textContent = 'SEM CONFIG';
+        return;
+      }
+
+      if (chipStatus) chipStatus.textContent = 'BUSCANDO...';
+
+      try {
+        const res = await evoFetch('/instance/fetchInstances');
+        const raw = await res.json();
+        
+        console.log('[Evolution API] Resposta bruta das instâncias:', raw);
+        
+        const instances = Array.isArray(raw) ? raw : (raw.data || []);
+        availableInstances = instances;
+
+        if (!instances.length) {
+          if (chipStatus) chipStatus.textContent = 'SEM INSTÂNCIA';
+          if (chipFilterEl) chipFilterEl.innerHTML = '<option value="">Nenhum chip ativo</option>';
+          return;
+        }
+
+        // Popula as opções do seletor de chips dinamicamente
+        if (chipFilterEl) {
+          chipFilterEl.innerHTML = instances.map(inst => {
+            const name = inst.instance?.instanceName || inst.instanceName || inst.name || inst.id || '';
+            return name ? `<option value="${name}">${name}</option>` : '';
+          }).filter(Boolean).join('');
+          
+          if(config.evolutionInstance) chipFilterEl.value = config.evolutionInstance;
+        }
+
+        // Popula seletor de SDRs ativos
+        if (sdrFilterEl) {
+          sdrFilterEl.innerHTML = '<option value="all">Todos</option>' + 
+            sdrMappings.map(m => `<option value="${m.instance}">${m.sdrName}</option>`).join('');
+        }
+
+        // Renderiza badges individuais de status de conexão dos chips
+        let anyConnected = false;
+        let statusHtml = '';
+
+        for (const inst of instances) {
+          const name = inst.instance?.instanceName || inst.instanceName || inst.name || inst.id || '?';
+          if (name === '?') continue;
+
+          try {
+            const sr = await evoFetch('/instance/connectionState/' + name);
+            const sd = await sr.json();
+            const state = sd.instance?.state || sd.state || 'unknown';
+            const connected = state === 'open';
+            if (connected) anyConnected = true;
+
+            const mapping = sdrMappings.find(m => m.instance === name);
+            const sdrLabel = mapping ? ` · ${mapping.sdrName}` : '';
+
+            statusHtml += `<span style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:20px;font-family:var(--mono);font-size:9px;background:${connected?'rgba(0,229,160,0.1)':'rgba(255,45,85,0.1)'};color:${connected?'var(--accent)':'var(--danger)'}"><span style="width:5px;height:5px;border-radius:50%;background:${connected?'var(--accent)':'var(--danger)'};display:inline-block"></span>${name}${sdrLabel}</span>`;
+          } catch(e) {
+            statusHtml += `<span style="color:var(--muted);font-size:9px">${name}: erro</span>`;
+          }
+        }
+
+        if (chipStatusRow) chipStatusRow.innerHTML = statusHtml;
+        if (chipStatus) {
+          chipStatus.textContent = anyConnected ? 'CONECTADO' : 'DESCONECTADO';
+          chipStatus.style.color = anyConnected ? 'var(--accent)' : 'var(--danger)';
+        }
+
+        renderSDRMappingList();
+        await loadWAConversations();
+
+      } catch(e) {
+        console.error('[Erro Crítico checkAllChips]:', e);
+        if (chipStatus) chipStatus.textContent = 'ERRO PROXY';
+      }
+    }
+
+    function onSDRFilterChange() {
+      const val = document.getElementById('waSDRFilter').value;
+      const chipSel = document.getElementById('waChipFilter');
+      if (val !== 'all' && chipSel) {
+        chipSel.value = val;
+      }
+      loadWAConversations();
+    }
+
+    function renderSDRMappingList() {
+      const el = document.getElementById('sdrChipMappingList');
+      if (!el) return;
+      if (!sdrMappings.length) {
+        el.innerHTML = '<div style="font-size:11px;color:var(--muted);font-family:var(--mono)">Nenhum SDR cadastrado.</div>';
+        return;
+      }
+      el.innerHTML = sdrMappings.map((m, i) => `
+        <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:7px;align-items:center">
+          <input type="text" class="form-input" style="font-size:10px;padding:6px 9px" placeholder="Nome do SDR" value="${m.sdrName}" oninput="sdrMappings(${i}).sdrName=this.value">
+          <select class="form-select" style="font-size:10px;padding:6px 9px" onchange="sdrMappings(${i}).instance=this.value">
+            <option value="">Selecione chip...</option>
+            ${availableInstances.map(inst => {
+              const n = inst.instance?.instanceName || inst.instanceName || inst.name || '';
+              return n ? `<option value="${n}" ${m.instance === n ? 'selected' : ''}>${n}</option>` : '';
+            }).join('')}
+          </select>
+          <button class="btn-danger" style="padding:5px 9px;font-size:11px" onclick="removeSDRMapping(${i})">✕</button>
+        </div>
+      `).join('');
+    }
+
+    function addSDRMapping() { sdrMappings.push({sdrName:'',instance:''}); renderSDRMappingList(); }
+    function removeSDRMapping(i) { sdrMappings.splice(i,1); renderSDRMappingList(); }
+    
+    function saveSDRMappings() {
+      localStorage.setItem('sdr_mappings', JSON.stringify(sdrMappings));
+      alert('Mapeamento dos SDRs salvos!');
+      checkAllChips();
+    }
+
+    async function loadWAConversations() {
+      const list = document.getElementById('waDashConvList');
+      if (!config.evolutionUrl || !config.evolutionToken) return;
+      
+      const chipSel = document.getElementById('waChipFilter');
+      const instance = (chipSel && chipSel.value) || config.evolutionInstance;
+      if (!instance) return;
+
+      const mapping = sdrMappings.find(m => m.instance === instance);
+      const sdrLabel = mapping ? mapping.sdrName : null;
+
+      if (list) list.innerHTML = '<div style="padding:16px;text-align:center;font-family:var(--mono);font-size:10px;color:var(--muted)">⏳ Carregando tempo real...</div>';
+
+      try {
+        const res = await evoFetch('/chat/findChats/' + instance);
+        const data = await res.json();
+        
+        if (!res.ok) {
+          if (list) list.innerHTML = `<div class="empty-state"><div class="empty-sub">Erro HTTP ${res.status}</div></div>`;
+          return;
+        }
+
+        const chats = Array.isArray(data) ? data.slice(0, 15) : [];
+        if (!chats.length) {
+          if (list) list.innerHTML = '<div class="empty-state"><div class="empty-sub">Nenhuma conversa recente neste chip.</div></div>';
+          return;
+        }
+
+        const colors = ['#0066ff', '#ff6b35', '#7c3aed', '#00b4d8'];
+        
+        if (list) {
+          list.innerHTML = chats.map(c => {
+            const name = c.name || c.pushName || (c.id || '').replace('@s.whatsapp.net', '') || 'Desconhecido';
+            const initials = name.substring(0, 2).toUpperCase();
+            const lastMsg = c.lastMessage?.message?.conversation || c.lastMessage?.message?.extendedTextMessage?.text || '...';
+            const ts = c.lastMessage?.messageTimestamp;
+            const time = ts ? new Date(ts * 1000).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '';
+            const unread = c.unreadCount || 0;
+            const idx = Math.abs(name.charCodeAt(0) || 0) % colors.length;
+
+            return `
+              <div class="call-item">
+                <div class="call-avatar" style="background:${colors[idx]}">${initials}</div>
+                <div class="call-info">
+                  <div class="call-top"><div class="call-name">${name}</div><div class="call-time">${time}</div></div>
+                  <div class="call-meta">${lastMsg}</div>
+                  <div class="call-tags">
+                    ${unread > 0 ? `<span class="tag tag-warn">NÃO RESPONDIDO (${unread})</span>` : ''}
+                    ${sdrLabel ? `<span class="tag tag-ms">SDR: ${sdrLabel}</span>` : ''}
+                  </div>
+                </div>
+              </div>
+            `;
+          }).join('');
+        }
+      } catch(e) {
+        if (list) list.innerHTML = `<div class="empty-state"><div class="empty-sub">Erro ao processar conversas: ${e.message}</div></div>`;
+      }
+    }
+  </script>
+</body>
+</html>
