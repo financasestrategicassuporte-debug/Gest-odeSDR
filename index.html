@@ -1172,10 +1172,17 @@ async function loadWAConversations(instanceName) {
       return;
     }
 
-    vlog('✓ ' + rawChats.length + ' chats. Renderizando...', 'var(--accent)');
+    vlog('✓ ' + rawChats.length + ' chats brutos carregados', 'var(--accent)');
+
+    // Log estrutura do primeiro chat para debug
+    if (rawChats[0]) {
+      vlog('Estrutura chat[0]: ' + JSON.stringify(rawChats[0]).substring(0, 200), 'var(--ms)');
+    }
 
     // Ordena: não lidas primeiro, depois por timestamp desc
+    // Aceita qualquer campo de ID (id, remoteJid, jid)
     const chats = rawChats
+      .map(c => ({ ...c, id: c.id || c.remoteJid || c.jid || '' }))
       .filter(c => c.id && !String(c.id).includes('@broadcast') && !String(c.id).includes('@newsletter'))
       .sort((a,b) => {
         const ud = getUnread(b) - getUnread(a);
@@ -1183,6 +1190,8 @@ async function loadWAConversations(instanceName) {
         return getTs(b) - getTs(a);
       })
       .slice(0, 20);
+
+    vlog('Após filtro/sort: ' + chats.length + ' chats para exibir', chats.length ? 'var(--accent)' : 'var(--danger)');
 
     console.log('[WA] Top 3:', chats.slice(0,3).map(c=>({ id:c.id, ts: new Date(getTs(c)*1000).toLocaleTimeString(), unread:getUnread(c), name:c.pushName })));
 
