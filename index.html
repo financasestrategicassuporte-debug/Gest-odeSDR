@@ -137,9 +137,7 @@
   .step-arrow{color:var(--muted);font-size:9px}
   .flow-editor{position:fixed;inset:0;z-index:300;background:rgba(8,12,16,.97);backdrop-filter:blur(8px);display:none;flex-direction:column}
   .flow-editor.active{display:flex}
-  .flow-editor-header{padding:14px 22px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;background:var(--surface)}
-  .flow-editor-title{font-size:15px;font-weight:800;flex:1}
-  .flow-editor-body{flex:1;display:grid;grid-template-columns:260px 1fr;overflow:hidden}
+  /* flow-editor legacy removed */
   .flow-steps-panel{border-right:1px solid var(--border);padding:18px;overflow-y:auto;background:var(--surface)}
   .flow-canvas{flex:1;padding:22px;overflow-y:auto}
   .step-card{background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:9px}
@@ -178,6 +176,86 @@
   .toast-err{background:rgba(255,45,85,.15);border:1px solid rgba(255,45,85,.3);color:var(--danger)}
   optgroup { color: var(--accent); font-family: var(--mono); font-size: 10px; letter-spacing: 1px; background: var(--surface); }
   optgroup option { color: var(--text); font-size: 11px; background: var(--surface2); padding-left: 8px; }
+
+  /* ══════════════════════════════════════════
+     VISUAL FLOW EDITOR — CSS COMPLETO
+  ══════════════════════════════════════════ */
+  .flow-editor{position:fixed;inset:0;z-index:300;background:#080c10;display:none;flex-direction:column}
+  .flow-editor.active{display:flex}
+
+  /* Header */
+  .fe-header{display:flex;align-items:center;gap:10px;padding:10px 16px;background:#0d1117;border-bottom:1px solid #1e2a35;flex-shrink:0;height:52px}
+  .fe-title{flex:1;min-width:0}
+  .fe-title input{background:transparent;border:none;outline:none;font-family:'Syne',sans-serif;font-size:15px;font-weight:800;color:#e8f0f7;width:100%}
+  .fe-title input::placeholder{color:#4a6070}
+
+  /* Body layout */
+  .fe-body{display:grid;grid-template-columns:220px 1fr 270px;height:calc(100vh - 52px);overflow:hidden}
+
+  /* Left palette */
+  .fe-palette{background:#0d1117;border-right:1px solid #1e2a35;padding:14px 12px;overflow-y:auto;display:flex;flex-direction:column;gap:0}
+  .fe-palette label.form-label{font-size:9px}
+  .fe-pnode{display:flex;align-items:center;gap:8px;padding:9px 11px;border-radius:8px;cursor:grab;margin-bottom:5px;border:1px solid #1e2a35;background:#131920;font-size:12px;font-weight:600;color:#e8f0f7;user-select:none;transition:border-color .15s,transform .15s}
+  .fe-pnode:hover{border-color:#00e5a0;transform:translateX(2px)}
+  .fe-pnode:active{cursor:grabbing}
+  .fe-ndot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+
+  /* Status toggle */
+  .fe-toggle{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+  .fe-toggle-btn{padding:8px 4px;border-radius:8px;text-align:center;cursor:pointer;border:1px solid #1e2a35;transition:all .15s;user-select:none}
+  .fe-toggle-btn .tbi{font-size:14px;margin-bottom:3px}
+  .fe-toggle-btn .tbl{font-family:'Space Mono',monospace;font-size:9px;color:#4a6070}
+  .fe-toggle-btn.on{border-color:#00e5a0;background:rgba(0,229,160,.08)}
+  .fe-toggle-btn.on .tbl{color:#00e5a0}
+  .fe-toggle-btn.pause{border-color:#ff6b35;background:rgba(255,107,53,.08)}
+  .fe-toggle-btn.pause .tbl{color:#ff6b35}
+
+  /* Canvas */
+  .fe-canvas-wrap{position:relative;overflow:hidden;background:#080c10;cursor:default}
+  .fe-canvas-wrap::before{content:'';position:absolute;inset:0;background-image:radial-gradient(circle,#1e2a35 1px,transparent 1px);background-size:24px 24px;pointer-events:none;z-index:0}
+  .fe-svg{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:1;overflow:visible}
+  .fe-nodes-layer{position:absolute;inset:0;z-index:2}
+
+  /* Nodes */
+  .fe-node{position:absolute;min-width:190px;max-width:230px;border-radius:10px;border:1px solid #1e2a35;background:#0d1117;cursor:default;user-select:none;box-shadow:0 4px 16px rgba(0,0,0,.5);transition:border-color .15s}
+  .fe-node:hover{border-color:rgba(0,229,160,.3)}
+  .fe-node.fe-selected{border-color:#00e5a0;box-shadow:0 0 0 2px rgba(0,229,160,.2),0 4px 16px rgba(0,0,0,.5)}
+  .fe-nh{padding:9px 11px;border-radius:10px 10px 0 0;display:flex;align-items:center;gap:7px;cursor:move;user-select:none}
+  .fe-nt{font-family:'Space Mono',monospace;font-size:9px;font-weight:700;letter-spacing:1px;flex:1}
+  .fe-ndel{background:none;border:none;color:#4a6070;cursor:pointer;font-size:12px;padding:0;line-height:1;transition:color .15s;margin-left:auto;flex-shrink:0}
+  .fe-ndel:hover{color:#ff2d55}
+  .fe-nb{padding:10px 12px 12px;font-size:11px;color:#4a6070;line-height:1.5;border-radius:0 0 10px 10px;min-height:38px;word-break:break-word}
+  .fe-nb strong{color:#e8f0f7}
+
+  /* Ports */
+  .fe-port{position:absolute;width:14px;height:14px;border-radius:50%;border:2px solid;cursor:crosshair;z-index:3;transition:transform .15s,box-shadow .15s}
+  .fe-port:hover{transform:scale(1.5)!important;box-shadow:0 0 8px currentColor}
+  .fe-pi{left:-7px;top:50%;transform:translateY(-50%);border-color:#4a6070;background:#0d1117}
+  .fe-pi:hover{border-color:#00e5a0!important;transform:translateY(-50%) scale(1.4)!important}
+  .fe-po{right:-7px;top:50%;transform:translateY(-50%)}
+  .fe-po-y{right:-7px;top:30%;transform:translateY(-50%)}
+  .fe-po-n{right:-7px;top:70%;transform:translateY(-50%)}
+  .fe-plbl{position:absolute;right:18px;font-family:'Space Mono',monospace;font-size:8px;pointer-events:none;font-weight:700;letter-spacing:.5px}
+  .fe-plbl-y{top:calc(30% - 5px);color:#00e5a0}
+  .fe-plbl-n{top:calc(70% - 5px);color:#ff2d55}
+
+  /* BH badge */
+  .bh-badge{display:inline-flex;align-items:center;gap:4px;font-family:'Space Mono',monospace;font-size:8px;padding:2px 7px;border-radius:20px;margin-top:5px}
+  .bh-on{background:rgba(0,229,160,.1);color:#00e5a0}
+  .bh-off{background:rgba(74,96,112,.15);color:#4a6070}
+
+  /* Right properties panel */
+  .fe-props{background:#0d1117;border-left:1px solid #1e2a35;padding:14px;overflow-y:auto}
+  .fe-props-title{font-family:'Space Mono',monospace;font-size:9px;letter-spacing:2px;text-transform:uppercase;margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid #1e2a35}
+
+  /* Hint box */
+  .fe-hint{background:rgba(0,229,160,.04);border:1px solid rgba(0,229,160,.15);border-radius:8px;padding:10px 12px;font-family:'Space Mono',monospace;font-size:9px;color:#4a6070;line-height:1.8;margin-top:8px}
+  .fe-hint strong{color:#e8f0f7}
+
+  /* Empty canvas hint */
+  .fe-canvas-empty{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;color:#1e2a35;pointer-events:none;z-index:0;user-select:none}
+  .fe-canvas-empty div:first-child{font-size:40px;margin-bottom:10px;opacity:.4}
+  .fe-canvas-empty div:last-child{font-family:'Space Mono',monospace;font-size:11px;letter-spacing:1px;opacity:.4}
   ::-webkit-scrollbar{width:4px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
   @media(max-width:1100px){.stats-grid{grid-template-columns:repeat(2,1fr)}.grid-2{grid-template-columns:1fr}}
 </style>
@@ -249,10 +327,20 @@
           </div>
         </div>
         <div class="panel">
-          <div class="panel-header"><div class="panel-title">WhatsApp — Ao Vivo</div><div class="panel-badge">TEMPO REAL</div></div>
-          <div class="panel-body" style="padding:12px 18px">
-            <div class="call-item"><div class="call-avatar">JM</div><div class="call-info"><div class="call-top"><div class="call-name">João Mendes</div><div class="call-time">14:41</div></div><div class="call-meta">Pode me mandar mais detalhes?</div><div class="call-tags"><span class="tag tag-warn">SEM RESPOSTA 8min</span></div></div></div>
-            <div class="call-item"><div class="call-avatar" style="background:linear-gradient(135deg,#ff6b35,#ff2d55)">PS</div><div class="call-info"><div class="call-top"><div class="call-name">Paula Santos</div><div class="call-time">14:38</div></div><div class="call-meta">Vou confirmar na agenda!</div><div class="call-tags"><span class="tag tag-ok">REUNIÃO AGENDADA</span></div></div></div>
+          <div class="panel-header">
+            <div class="panel-title">WhatsApp — Ao Vivo</div>
+            <div style="display:flex;align-items:center;gap:8px">
+              <div id="waChipStatus" class="panel-badge" style="cursor:pointer" onclick="checkAllChips()">VERIFICANDO...</div>
+              <button class="btn-secondary btn-sm" style="font-size:9px" onclick="loadWAConversations()">↺</button>
+            </div>
+          </div>
+          <!-- Status do chip -->
+          <div id="waChipBar" style="padding:8px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:10px">
+            <span style="color:var(--muted)">Chip:</span>
+            <span id="waChipName" style="color:var(--muted)">—</span>
+          </div>
+          <div class="panel-body" style="padding:0 18px;max-height:280px;overflow-y:auto" id="waDashConvList">
+            <div class="empty-state" style="padding:20px"><div class="empty-sub">Configure a Evolution API para ver conversas.</div></div>
           </div>
         </div>
       </div>
@@ -616,6 +704,10 @@
         <g id="feEdgesG"></g>
         <path id="fePreview" style="display:none;fill:none;stroke:var(--accent);stroke-width:2;stroke-dasharray:6 3"/>
       </svg>
+      <div class="fe-canvas-empty" id="feCanvasEmpty">
+        <div>⬡</div>
+        <div>Arraste nodes da esquerda para o canvas</div>
+      </div>
       <div class="fe-nodes-layer" id="feNodesLayer"></div>
     </div>
 
@@ -859,6 +951,88 @@ async function sendWhatsApp() {
   } catch(e) { resultEl.style.color='var(--danger)'; resultEl.textContent='✗ '+e.message; }
 }
 
+
+// ── WHATSAPP AO VIVO ──────────────────────────────────────────────
+async function checkAllChips() {
+  const chipBar = document.getElementById('waChipBar');
+  const chipStatus = document.getElementById('waChipStatus');
+  const chipName = document.getElementById('waChipName');
+  if (!config.evolutionUrl || !config.evolutionToken) {
+    if (chipStatus) { chipStatus.textContent = 'SEM CONFIG'; chipStatus.style.background = 'rgba(255,45,85,.1)'; chipStatus.style.color = 'var(--danger)'; }
+    return;
+  }
+  try {
+    const res = await fetch(config.evolutionUrl + '/instance/fetchInstances', { headers: evoHeaders() });
+    const data = await res.json();
+    const instances = Array.isArray(data) ? data : [];
+    if (!instances.length) {
+      if (chipStatus) chipStatus.textContent = 'SEM INSTÂNCIA';
+      return;
+    }
+    // Verifica status de cada instância
+    let html = '<span style="color:var(--muted)">Chips:</span>';
+    let anyConnected = false;
+    for (const inst of instances) {
+      const name = inst.instance?.instanceName || inst.instanceName || inst.name || '?';
+      try {
+        const sr = await fetch(config.evolutionUrl + '/instance/connectionState/' + name, { headers: evoHeaders() });
+        const sd = await sr.json();
+        const state = sd.instance?.state || sd.state || 'unknown';
+        const connected = state === 'open';
+        if (connected) anyConnected = true;
+        html += `<span style="display:inline-flex;align-items:center;gap:4px;margin-left:8px;padding:2px 8px;border-radius:20px;background:${connected?'rgba(0,229,160,.1)':'rgba(255,45,85,.1)'};color:${connected?'var(--accent)':'var(--danger)'}">
+          <span style="width:6px;height:6px;border-radius:50%;background:${connected?'var(--accent)':'var(--danger)'};display:inline-block"></span>
+          ${name}
+        </span>`;
+      } catch { html += `<span style="margin-left:8px;color:var(--muted)">${name}: erro</span>`; }
+    }
+    if (chipBar) chipBar.innerHTML = html;
+    if (chipStatus) {
+      chipStatus.textContent = anyConnected ? 'CONECTADO' : 'DESCONECTADO';
+      chipStatus.style.background = anyConnected ? 'rgba(0,229,160,.1)' : 'rgba(255,45,85,.1)';
+      chipStatus.style.color = anyConnected ? 'var(--accent)' : 'var(--danger)';
+    }
+    // Carrega conversas
+    await loadWAConversations();
+  } catch(e) {
+    if (chipStatus) { chipStatus.textContent = 'ERRO'; }
+  }
+}
+
+async function loadWAConversations() {
+  const list = document.getElementById('waDashConvList');
+  if (!config.evolutionUrl || !config.evolutionToken || !config.evolutionInstance) return;
+  try {
+    const res = await fetch(config.evolutionUrl + '/chat/findChats/' + config.evolutionInstance, { headers: evoHeaders() });
+    if (!res.ok) return;
+    const data = await res.json();
+    const chats = Array.isArray(data) ? data.slice(0, 8) : [];
+    if (!chats.length) {
+      if (list) list.innerHTML = '<div class="empty-state" style="padding:16px"><div class="empty-sub">Nenhuma conversa recente.</div></div>';
+      return;
+    }
+    if (list) list.innerHTML = chats.map(c => {
+      const name = c.name || c.pushName || c.id?.replace('@s.whatsapp.net','') || 'Desconhecido';
+      const initials = name.split(' ').map(w=>w[0]).join('').substring(0,2).toUpperCase();
+      const lastMsg = c.lastMessage?.message?.conversation || c.lastMessage?.message?.extendedTextMessage?.text || '...';
+      const ts = c.lastMessage?.messageTimestamp;
+      const time = ts ? new Date(ts*1000).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}) : '';
+      const unread = c.unreadCount || 0;
+      return `<div class="call-item">
+        <div class="call-avatar" style="background:linear-gradient(135deg,var(--accent2),var(--accent))">${initials}</div>
+        <div class="call-info">
+          <div class="call-top">
+            <div class="call-name">${name}</div>
+            <div class="call-time">${time}</div>
+          </div>
+          <div class="call-meta" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:200px">${lastMsg}</div>
+          ${unread>0?`<div class="call-tags"><span class="tag tag-warn">SEM RESPOSTA (${unread})</span></div>`:''}
+        </div>
+      </div>`;
+    }).join('');
+  } catch(e) { /* silencioso */ }
+}
+
 async function checkWAStatus() {
   const instance = document.getElementById('waInstance').value.trim() || config.evolutionInstance;
   const resultEl = document.getElementById('waResult');
@@ -1047,6 +1221,8 @@ function feRenderNodes() {
   const layer = document.getElementById('feNodesLayer');
   if (!layer) return;
   layer.innerHTML = feNodes.map(n => feNodeHTML(n)).join('');
+  const empty = document.getElementById('feCanvasEmpty');
+  if (empty) empty.style.display = feNodes.length ? 'none' : 'block';
 }
 
 function fePortCenter(nodeId, port) {
@@ -1501,6 +1677,49 @@ function renderFlows() {
       </div>
     </div>`;
   }).join('');
+}
+
+
+// renderRDStages — exibe etapas agrupadas por funil na aba Fluxos
+function renderRDStages() {
+  const list = document.getElementById('rdStagesList');
+  const badge = document.getElementById('rdStagesBadge');
+  if (!list) return;
+  if (!rdStages.length) {
+    list.innerHTML = '<div class="empty-state" style="padding:14px"><div class="empty-sub">Conecte o RD Station para ver as etapas.</div></div>';
+    if (badge) badge.textContent = '—';
+    return;
+  }
+  if (badge) badge.textContent = rdStages.length + ' ETAPAS';
+  const colors = ['#00e5a0','#0066ff','#ff6b35','#ff2d55','#7c3aed','#4d9fff'];
+  const byPipeline = {};
+  rdStages.forEach(s => {
+    const key = s.pipelineName || 'Funil';
+    if (!byPipeline[key]) byPipeline[key] = [];
+    byPipeline[key].push(s);
+  });
+  let html = '';
+  Object.entries(byPipeline).forEach(([pname, stages]) => {
+    html += '<div style="margin-bottom:14px">';
+    html += '<div style="font-family:var(--mono);font-size:9px;letter-spacing:1px;color:var(--accent);margin-bottom:8px;text-transform:uppercase">' + pname + '</div>';
+    html += '<div class="stages-list">';
+    stages.forEach((s, i) => {
+      const linked = flows.filter(f => f.triggerStage === s.id);
+      html += '<div class="stage-item">';
+      html += '<div class="stage-dot" style="background:' + colors[i % colors.length] + '"></div>';
+      html += '<div class="stage-name">' + s.name + '</div>';
+      html += '<div class="stage-flow-link">' + (linked.length ? linked.map(f=>f.name).join(', ') : 'sem fluxo') + '</div>';
+      html += '</div>';
+    });
+    html += '</div></div>';
+  });
+  list.innerHTML = html;
+}
+
+// populateStageTriggerSelect — mantida para compatibilidade
+function populateStageTriggerSelect() {
+  // No visual editor, stages are loaded via feOnPipelineChange()
+  // This is kept for backward compatibility
 }
 
 function deleteFlow(id) {
