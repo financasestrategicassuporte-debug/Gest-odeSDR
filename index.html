@@ -725,14 +725,14 @@
 <div class="toast" id="toast"></div>
 
 <!-- MODAL: Conversa WhatsApp -->
-<div id="waChatModal" style="display:none;position:fixed;inset:0;z-index:400;background:rgba(8,12,16,.94);backdrop-filter:blur(8px);align-items:center;justify-content:center" onclick="if(event.target===this)this.classList.remove('active')">
+<div id="waChatModal" style="display:none;position:fixed;inset:0;z-index:400;background:rgba(8,12,16,.94);backdrop-filter:blur(8px);align-items:center;justify-content:center" onclick="if(event.target===this)closeWAChat()">
   <div style="background:var(--surface);border:1px solid var(--border);border-radius:16px;width:500px;max-width:96vw;max-height:88vh;display:flex;flex-direction:column;overflow:hidden">
     <div style="padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0">
       <div>
         <div id="waChatTitle" style="font-size:15px;font-weight:800"></div>
         <div id="waChatSub" style="font-family:var(--mono);font-size:10px;color:var(--accent);margin-top:2px"></div>
       </div>
-      <button onclick="document.getElementById('waChatModal').classList.remove('active')" style="background:transparent;border:1px solid var(--border);color:var(--muted);width:30px;height:30px;border-radius:8px;cursor:pointer;font-size:14px">✕</button>
+      <button onclick="closeWAChat()" style="background:transparent;border:1px solid var(--border);color:var(--muted);width:30px;height:30px;border-radius:8px;cursor:pointer;font-size:14px">✕</button>
     </div>
     <div id="waChatMessages" style="flex:1;overflow-y:auto;padding:16px 20px;display:flex;flex-direction:column"></div>
   </div>
@@ -975,17 +975,23 @@ async function sendWhatsApp() {
 
 
 // ── WHATSAPP AO VIVO ──────────────────────────────────────────────
+
+// Estado de chat aberto para auto-refresh
+let _waChatOpen = null; // { remoteJid, instance, name }
+let _waRefreshInterval = null;
+
 async function evoProxy(path, method='GET', body=null) {
-  // Chamada direta à Evolution API (CORS deve estar liberado no servidor)
+  // Chamada direta à Evolution API — CORS deve estar habilitado no servidor Evolution
+  const base = (config.evolutionUrl || '').replace(/\/+$/, '');
   const opts = {
     method,
     headers: { 'Content-Type': 'application/json', 'apikey': config.evolutionToken }
   };
   if (body) opts.body = JSON.stringify(body);
-  const r = await fetch(config.evolutionUrl + path, opts);
+  const r = await fetch(base + path, opts);
   if (!r.ok) {
     const errText = await r.text().catch(() => '');
-    throw new Error('HTTP ' + r.status + (errText ? ': ' + errText.substring(0,80) : ''));
+    throw new Error('HTTP ' + r.status + (errText ? ': ' + errText.substring(0, 120) : ''));
   }
   return r.json();
 }
@@ -1126,58 +1132,59 @@ async function loadWAConversations(instanceName) {
   }
 
   try {
-    // ── ESTRATÉGIA: busca mensagens recentes primeiro (mais confiável para ordenação) ──
+    // ── ESTRATÉGIA: tenta endpoints mais comuns da Evolution v1/v2 ──
     let rawChats = [];
 
-    // Tenta 1: findMessages com sort por timestamp — retorna msgs recentes de todos os chats
-    try {
-      const msgData = await evoProxy('/message/findMessages/' + instance, 'POST', {
-        where: {},
-        limit: 100,
-        orderBy: { messageTimestamp: 'desc' }
-      });
-      const msgs = Array.isArray(msgData) ? msgData : (msgData?.messages?.records || msgData?.messages || msgData?.data || []);
-      if (msgs.length > 0) {
-        // Agrupa por remoteJid, mantém a msg mais recente de cada chat
-        const chatMap = {};
-        for (const m of msgs) {
-          const jid = m.key?.remoteJid || m.remoteJid;
-          if (!jid || jid.includes('@broadcast') || jid.includes('@newsletter')) continue;
-          if (!chatMap[jid] || (m.messageTimestamp||0) > (chatMap[jid].lastMessage?.messageTimestamp||0)) {
-            chatMap[jid] = {
-              id: jid,
-              pushName: m.pushName || m.key?.participant || '',
-              lastMessage: { messageTimestamp: m.messageTimestamp||m.timestamp, message: m.message, body: m.body },
-              unreadCount: 0,
-              _fromMsgSearch: true
-            };
-          }
-        }
-        rawChats = Object.values(chatMap);
-        console.log('[WA] Estratégia mensagens: ' + rawChats.length + ' chats extraídos de msgs');
-      }
-    } catch(e1) {
-      console.log('[WA] findMessages falhou:', e1.message);
-    }
-
-    // Tenta 2: findChats (v1) — se estratégia 1 falhou ou retornou vazio
+    // Tenta 1: findChats (v1/v2 — mais confiável para lista de conversas)
     if (!rawChats.length) {
       try {
-        const d = await evoProxy('/chat/findChats/' + instance);
-        rawChats = Array.isArray(d) ? d : (d.chats||d.data||d.conversations||[]);
-        console.log('[WA] Estratégia findChats: ' + rawChats.length + ' chats');
-      } catch(e2) { console.log('[WA] findChats falhou:', e2.message); }
+        const d = await evoProxy('/chat/findChats/' + instance, 'POST', { where: {}, limit: 50 });
+        const arr = Array.isArray(d) ? d : (d.chats || d.data || d.conversations || []);
+        if (arr.length) { rawChats = arr; console.log('[WA] Estratégia findChats: ' + rawChats.length + ' chats'); }
+      } catch(e1) { console.log('[WA] findChats falhou:', e1.message); }
     }
 
-    // Tenta 3: fetchChats com body (v2)
+    // Tenta 2: fetchChats com body (v2 alternativo)
     if (!rawChats.length) {
       try {
         const d = await evoProxy('/chat/fetchChats/' + instance, 'POST', {
           where: {}, orderBy: { updatedAt: 'desc' }, limit: 50
         });
-        rawChats = Array.isArray(d) ? d : (d.chats||d.data||d.conversations||[]);
-        console.log('[WA] Estratégia fetchChats: ' + rawChats.length + ' chats');
-      } catch(e3) { console.log('[WA] fetchChats falhou:', e3.message); }
+        const arr = Array.isArray(d) ? d : (d.chats || d.data || d.conversations || []);
+        if (arr.length) { rawChats = arr; console.log('[WA] Estratégia fetchChats: ' + rawChats.length + ' chats'); }
+      } catch(e2) { console.log('[WA] fetchChats falhou:', e2.message); }
+    }
+
+    // Tenta 3: findMessages agrupado por remoteJid (fallback)
+    if (!rawChats.length) {
+      try {
+        const msgData = await evoProxy('/message/findMessages/' + instance, 'POST', {
+          where: {},
+          limit: 100,
+          orderBy: { messageTimestamp: 'desc' }
+        });
+        const msgs = Array.isArray(msgData) ? msgData : (msgData?.messages?.records || msgData?.messages || msgData?.data || []);
+        if (msgs.length > 0) {
+          const chatMap = {};
+          for (const m of msgs) {
+            const jid = m.key?.remoteJid || m.remoteJid;
+            if (!jid || jid.includes('@broadcast') || jid.includes('@newsletter')) continue;
+            if (!chatMap[jid] || (m.messageTimestamp||0) > (chatMap[jid].lastMessage?.messageTimestamp||0)) {
+              chatMap[jid] = {
+                id: jid,
+                pushName: m.pushName || m.key?.participant || '',
+                lastMessage: { messageTimestamp: m.messageTimestamp||m.timestamp, message: m.message, body: m.body },
+                unreadCount: 0,
+                _fromMsgSearch: true
+              };
+            }
+          }
+          rawChats = Object.values(chatMap);
+          console.log('[WA] Estratégia findMessages: ' + rawChats.length + ' chats extraídos');
+        }
+      } catch(e3) {
+        console.log('[WA] findMessages falhou:', e3.message);
+      }
     }
 
     if (!rawChats.length) {
@@ -1311,40 +1318,87 @@ async function loadWAConversations(instanceName) {
 }
 
 async function openWAChat(remoteJid, instance, name) {
-  // Mostra modal com as mensagens do chat selecionado
-  showToast('Abrindo conversa de ' + name + ' (' + instance + ')...', 'ok');
+  // Salva estado do chat aberto para auto-refresh
+  _waChatOpen = { remoteJid, instance, name };
+
   const modal = document.getElementById('waChatModal');
   if (!modal) return;
   document.getElementById('waChatTitle').textContent = name;
   document.getElementById('waChatSub').textContent = '📱 ' + instance + '  ·  ' + remoteJid.replace('@s.whatsapp.net','').replace('@lid','');
   document.getElementById('waChatMessages').innerHTML = '<div style="text-align:center;padding:20px;font-family:var(--mono);font-size:10px;color:var(--muted)">⏳ Carregando mensagens...</div>';
   modal.classList.add('active');
+
+  // Para qualquer refresh anterior
+  if (_waRefreshInterval) { clearInterval(_waRefreshInterval); _waRefreshInterval = null; }
+
+  await _loadWAChatMessages(remoteJid, instance);
+
+  // Auto-refresh a cada 5s enquanto o chat estiver aberto
+  _waRefreshInterval = setInterval(async () => {
+    if (_waChatOpen && _waChatOpen.remoteJid === remoteJid) {
+      await _loadWAChatMessages(remoteJid, instance, true);
+    }
+  }, 5000);
+}
+
+async function _loadWAChatMessages(remoteJid, instance, silent=false) {
+  const msgContainer = document.getElementById('waChatMessages');
+  if (!msgContainer) return;
   try {
     let data;
+    // Tenta /chat/findMessages primeiro (mais comum na Evolution v1/v2)
     try {
-      data = await evoProxy('/chat/findMessages/' + instance, 'POST', { where:{ key:{ remoteJid } }, limit:30 });
+      data = await evoProxy('/chat/findMessages/' + instance, 'POST', { where:{ key:{ remoteJid } }, limit: 40 });
     } catch {
-      data = await evoProxy('/message/findMessages/' + instance, 'POST', { where:{ key:{ remoteJid } }, limit:30 });
+      // Fallback para /message/findMessages
+      data = await evoProxy('/message/findMessages/' + instance, 'POST', { where:{ key:{ remoteJid } }, limit: 40 });
     }
-    const msgs = Array.isArray(data) ? data : (data.messages?.records || data.messages || data.data || []);
-    const msgsSorted = msgs.slice(-30).reverse();
-    if (!msgsSorted.length) {
-      document.getElementById('waChatMessages').innerHTML = '<div style="text-align:center;padding:20px;font-family:var(--mono);font-size:10px;color:var(--muted)">Sem mensagens encontradas.</div>';
+    const msgs = Array.isArray(data) ? data : (data?.messages?.records || data?.messages || data?.data || []);
+    const msgsSorted = [...msgs].sort((a,b) => {
+      const ta = a.messageTimestamp || a.timestamp || 0;
+      const tb = b.messageTimestamp || b.timestamp || 0;
+      return Number(tb) - Number(ta);
+    }).slice(0, 40).reverse();
+
+    if (!msgsSorted.length && !silent) {
+      msgContainer.innerHTML = '<div style="text-align:center;padding:20px;font-family:var(--mono);font-size:10px;color:var(--muted)">Sem mensagens encontradas.</div>';
       return;
     }
-    document.getElementById('waChatMessages').innerHTML = msgsSorted.map(m => {
+    if (!msgsSorted.length) return;
+
+    // Verifica se é necessário scroll para baixo (usuário está no fundo)
+    const wasAtBottom = msgContainer.scrollHeight - msgContainer.scrollTop - msgContainer.clientHeight < 60;
+
+    msgContainer.innerHTML = msgsSorted.map(m => {
       const fromMe = m.key?.fromMe || m.fromMe;
-      const text = m.message?.conversation || m.message?.extendedTextMessage?.text || m.message?.imageMessage?.caption || m.body || m.text || '[mídia]';
+      const text = m.message?.conversation || m.message?.extendedTextMessage?.text
+        || m.message?.imageMessage?.caption || m.message?.videoMessage?.caption
+        || m.body || m.text || '[mídia]';
       const ts = m.messageTimestamp || m.timestamp;
-      const timeStr = ts ? new Date((ts>9999999999?ts:ts*1000)).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}) : '';
+      const timeStr = ts ? new Date((Number(ts)>9999999999 ? Number(ts) : Number(ts)*1000))
+        .toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}) : '';
       return `<div style="display:flex;flex-direction:column;align-items:${fromMe?'flex-end':'flex-start'};margin-bottom:8px">
         <div style="max-width:75%;background:${fromMe?'rgba(0,229,160,.12)':'rgba(30,42,53,.8)'};border:1px solid ${fromMe?'rgba(0,229,160,.25)':'var(--border)'};border-radius:${fromMe?'12px 12px 2px 12px':'12px 12px 12px 2px'};padding:8px 12px;font-size:12px;color:var(--text);line-height:1.5">${text}</div>
         <div style="font-family:var(--mono);font-size:9px;color:var(--muted);margin-top:3px">${timeStr}${fromMe?' · SDR':''}</div>
       </div>`;
     }).join('');
+
+    // Scroll para baixo se estava no fundo ou é primeiro load
+    if (!silent || wasAtBottom) {
+      msgContainer.scrollTop = msgContainer.scrollHeight;
+    }
   } catch(e) {
-    document.getElementById('waChatMessages').innerHTML = `<div style="text-align:center;padding:20px;font-family:var(--mono);font-size:10px;color:var(--danger)">Erro: ${e.message}</div>`;
+    if (!silent) {
+      msgContainer.innerHTML = `<div style="text-align:center;padding:20px;font-family:var(--mono);font-size:10px;color:var(--danger)">Erro: ${e.message}</div>`;
+    }
   }
+}
+
+function closeWAChat() {
+  _waChatOpen = null;
+  if (_waRefreshInterval) { clearInterval(_waRefreshInterval); _waRefreshInterval = null; }
+  const modal = document.getElementById('waChatModal');
+  if (modal) modal.classList.remove('active');
 }
 
 async function checkWAStatus() {
@@ -2191,18 +2245,18 @@ window.onload = async () => {
   renderFlows();
   checkProxy();
   document.getElementById('serverUrl').value = config.serverUrl || '';
+
   // Inicializa o painel WhatsApp ao vivo automaticamente
   if (config.evolutionUrl && config.evolutionToken) {
     setTimeout(() => checkAllChips(), 500);
-    // Auto-refresh a cada 30s para mostrar conversas em tempo real
+
+    // Auto-refresh a cada 8s — conversas sempre atualizadas
     setInterval(() => {
-      if (config.evolutionUrl && config.evolutionToken) {
-        const instance = config.evolutionInstance;
-        // usa a instância salva ou relê tudo via checkAllChips
-        if (instance) loadWAConversations(instance);
-        else checkAllChips();
-      }
-    }, 30000);
+      if (!config.evolutionUrl || !config.evolutionToken) return;
+      const instance = config.evolutionInstance;
+      if (instance) loadWAConversations(instance);
+      else checkAllChips();
+    }, 8000);
   }
 
   // Invalida cache antigo sem pipelineName e re-busca sempre que tiver token
