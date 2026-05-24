@@ -1132,39 +1132,82 @@ async function loadWAConversations(instanceName) {
     return Number(c.unreadCount||c.unreadMessages||c.unread||c.messagesUnread||c.count?.unread||0);
   }
 
+  // Log visível na tela
+  function vlog(msg, color='var(--muted)') {
+    if (!list) return;
+    let log = list.querySelector('.wa-debug-log');
+    if (!log) {
+      list.innerHTML = '<div class="wa-debug-log" style="padding:12px 18px;font-family:var(--mono);font-size:10px;line-height:2.2"></div>';
+      log = list.querySelector('.wa-debug-log');
+    }
+    const line = document.createElement('div');
+    line.style.color = color;
+    line.textContent = '▸ ' + msg;
+    log.appendChild(line);
+    log.scrollTop = log.scrollHeight;
+  }
+
+  // Inicializa log
+  if (list) list.innerHTML = '<div class="wa-debug-log" style="padding:12px 18px;font-family:var(--mono);font-size:10px;line-height:2.2"></div>';
+  vlog('Instância: ' + instance, 'var(--accent)');
+  vlog('URL: ' + (config.evolutionUrl||'').replace(/\/+$/,''), 'var(--accent)');
+
   try {
-    // ── ESTRATÉGIA: tenta endpoints mais comuns da Evolution v1/v2 ──
     let rawChats = [];
 
-    // Tenta 1: findChats (v1/v2 — mais confiável para lista de conversas)
+    // Tenta 1: GET /chat/findChats (Evolution v1 — sem body)
     if (!rawChats.length) {
+      vlog('Tentando GET /chat/findChats/' + instance + '...');
+      try {
+        const d = await evoProxy('/chat/findChats/' + instance, 'GET');
+        const arr = Array.isArray(d) ? d : (d.chats || d.data || d.conversations || []);
+        vlog('GET findChats → ' + (arr.length ? arr.length + ' chats ✓' : 'array vazio'), arr.length ? 'var(--accent)' : 'var(--warn)');
+        if (arr.length) rawChats = arr;
+      } catch(e1) { vlog('GET findChats → ' + e1.message.substring(0,80), 'var(--danger)'); }
+    }
+
+    // Tenta 2: POST /chat/findChats com body
+    if (!rawChats.length) {
+      vlog('Tentando POST /chat/findChats/' + instance + '...');
       try {
         const d = await evoProxy('/chat/findChats/' + instance, 'POST', { where: {}, limit: 50 });
         const arr = Array.isArray(d) ? d : (d.chats || d.data || d.conversations || []);
-        if (arr.length) { rawChats = arr; console.log('[WA] Estratégia findChats: ' + rawChats.length + ' chats'); }
-      } catch(e1) { console.log('[WA] findChats falhou:', e1.message); }
+        vlog('POST findChats → ' + (arr.length ? arr.length + ' chats ✓' : 'array vazio'), arr.length ? 'var(--accent)' : 'var(--warn)');
+        if (arr.length) rawChats = arr;
+      } catch(e2) { vlog('POST findChats → ' + e2.message.substring(0,80), 'var(--danger)'); }
     }
 
-    // Tenta 2: fetchChats com body (v2 alternativo)
+    // Tenta 3: POST /chat/fetchChats
     if (!rawChats.length) {
+      vlog('Tentando POST /chat/fetchChats/' + instance + '...');
       try {
-        const d = await evoProxy('/chat/fetchChats/' + instance, 'POST', {
-          where: {}, orderBy: { updatedAt: 'desc' }, limit: 50
-        });
+        const d = await evoProxy('/chat/fetchChats/' + instance, 'POST', { where: {}, limit: 50 });
         const arr = Array.isArray(d) ? d : (d.chats || d.data || d.conversations || []);
-        if (arr.length) { rawChats = arr; console.log('[WA] Estratégia fetchChats: ' + rawChats.length + ' chats'); }
-      } catch(e2) { console.log('[WA] fetchChats falhou:', e2.message); }
+        vlog('POST fetchChats → ' + (arr.length ? arr.length + ' chats ✓' : 'array vazio'), arr.length ? 'var(--accent)' : 'var(--warn)');
+        if (arr.length) rawChats = arr;
+      } catch(e3) { vlog('POST fetchChats → ' + e3.message.substring(0,80), 'var(--danger)'); }
     }
 
-    // Tenta 3: findMessages agrupado por remoteJid (fallback)
+    // Tenta 4: GET /chat/fetchChats
     if (!rawChats.length) {
+      vlog('Tentando GET /chat/fetchChats/' + instance + '...');
+      try {
+        const d = await evoProxy('/chat/fetchChats/' + instance, 'GET');
+        const arr = Array.isArray(d) ? d : (d.chats || d.data || d.conversations || []);
+        vlog('GET fetchChats → ' + (arr.length ? arr.length + ' chats ✓' : 'array vazio'), arr.length ? 'var(--accent)' : 'var(--warn)');
+        if (arr.length) rawChats = arr;
+      } catch(e4) { vlog('GET fetchChats → ' + e4.message.substring(0,80), 'var(--danger)'); }
+    }
+
+    // Tenta 5: POST /message/findMessages agrupado
+    if (!rawChats.length) {
+      vlog('Tentando POST /message/findMessages/' + instance + '...');
       try {
         const msgData = await evoProxy('/message/findMessages/' + instance, 'POST', {
-          where: {},
-          limit: 100,
-          orderBy: { messageTimestamp: 'desc' }
+          where: {}, limit: 100, orderBy: { messageTimestamp: 'desc' }
         });
         const msgs = Array.isArray(msgData) ? msgData : (msgData?.messages?.records || msgData?.messages || msgData?.data || []);
+        vlog('POST findMessages → ' + msgs.length + ' msgs raw', msgs.length ? 'var(--accent)' : 'var(--warn)');
         if (msgs.length > 0) {
           const chatMap = {};
           for (const m of msgs) {
@@ -1175,23 +1218,44 @@ async function loadWAConversations(instanceName) {
                 id: jid,
                 pushName: m.pushName || m.key?.participant || '',
                 lastMessage: { messageTimestamp: m.messageTimestamp||m.timestamp, message: m.message, body: m.body },
-                unreadCount: 0,
-                _fromMsgSearch: true
+                unreadCount: 0
               };
             }
           }
           rawChats = Object.values(chatMap);
-          console.log('[WA] Estratégia findMessages: ' + rawChats.length + ' chats extraídos');
+          vlog('Agrupado → ' + rawChats.length + ' chats únicos ✓', rawChats.length ? 'var(--accent)' : 'var(--warn)');
         }
-      } catch(e3) {
-        console.log('[WA] findMessages falhou:', e3.message);
-      }
+      } catch(e5) { vlog('POST findMessages → ' + e5.message.substring(0,80), 'var(--danger)'); }
+    }
+
+    // Tenta 6: GET /message/findMessages (sem body)
+    if (!rawChats.length) {
+      vlog('Tentando GET /message/findMessages/' + instance + '...');
+      try {
+        const msgData = await evoProxy('/message/findMessages/' + instance, 'GET');
+        const msgs = Array.isArray(msgData) ? msgData : (msgData?.messages?.records || msgData?.messages || msgData?.data || []);
+        vlog('GET findMessages → ' + msgs.length + ' msgs', msgs.length ? 'var(--accent)' : 'var(--warn)');
+        if (msgs.length > 0) {
+          const chatMap = {};
+          for (const m of msgs) {
+            const jid = m.key?.remoteJid || m.remoteJid;
+            if (!jid || jid.includes('@broadcast') || jid.includes('@newsletter')) continue;
+            if (!chatMap[jid]) chatMap[jid] = { id: jid, pushName: m.pushName||'', lastMessage: { messageTimestamp: m.messageTimestamp, message: m.message }, unreadCount: 0 };
+          }
+          rawChats = Object.values(chatMap);
+          if (rawChats.length) vlog('Agrupado → ' + rawChats.length + ' chats ✓', 'var(--accent)');
+        }
+      } catch(e6) { vlog('GET findMessages → ' + e6.message.substring(0,80), 'var(--danger)'); }
     }
 
     if (!rawChats.length) {
-      list.innerHTML = '<div class="empty-state" style="padding:16px"><div class="empty-sub">Sem conversas em "' + instance + '".</div></div>';
+      vlog('', 'var(--muted)');
+      vlog('⚠ Todos os endpoints falharam ou retornaram vazio.', 'var(--warn)');
+      vlog('→ Copie esses logs e me mande para eu corrigir.', 'var(--warn)');
       return;
     }
+
+    vlog('✓ ' + rawChats.length + ' chats carregados. Renderizando...', 'var(--accent)');
 
     // Ordena: não lidas primeiro, depois por timestamp desc
     const chats = rawChats
