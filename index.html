@@ -555,7 +555,19 @@
                     <div class="form-group"><label class="form-label">API Key Global</label><input type="password" class="form-input" id="i_evolutionToken" placeholder="seu-api-key"></div>
                     <div class="form-group"><label class="form-label">Instância Padrão</label><input type="text" class="form-input" id="i_evolutionInstance" placeholder="minha-instancia"></div>
                   </div>
-                  <div style="display:flex;gap:7px;align-items:center">
+
+                  <!-- MAPEAMENTO SDR → CHIP -->
+                  <div style="border-top:1px solid var(--border);margin-top:14px;padding-top:14px">
+                    <div style="font-family:var(--mono);font-size:9px;letter-spacing:2px;color:var(--accent);margin-bottom:10px">◈ MAPEAMENTO SDR → CHIP</div>
+                    <div style="font-size:11px;color:var(--muted);margin-bottom:12px">Defina qual instância (chip) cada SDR usa para ligar e enviar WhatsApp.</div>
+                    <div id="sdrChipMappingList" style="display:flex;flex-direction:column;gap:8px;margin-bottom:10px"></div>
+                    <div style="display:flex;gap:7px">
+                      <button class="btn-secondary btn-sm" onclick="addSDRMapping()">+ Adicionar SDR</button>
+                      <button class="btn-primary btn-sm" onclick="saveSDRMappings()">💾 Salvar Mapeamentos</button>
+                    </div>
+                  </div>
+
+                  <div style="margin-top:14px;display:flex;gap:7px;align-items:center">
                     <button class="btn-primary btn-sm" onclick="saveAndTest('evolution')">💾 Salvar e Testar</button>
                     <div id="inlineResult_evolution" style="font-family:var(--mono);font-size:10px;color:var(--muted)"></div>
                   </div>
@@ -953,10 +965,17 @@ async function sendWhatsApp() {
 
 
 // ── WHATSAPP AO VIVO ──────────────────────────────────────────────
+// SDR Mappings — { sdrName, instance }[]
+let sdrMappings = JSON.parse(localStorage.getItem('sdr_mappings') || '[]');
+// Cache das instâncias disponíveis
+let availableInstances = [];
+
 async function checkAllChips() {
-  const chipBar = document.getElementById('waChipBar');
   const chipStatus = document.getElementById('waChipStatus');
-  const chipName = document.getElementById('waChipName');
+  const chipFilterEl = document.getElementById('waChipFilter');
+  const chipStatusRow = document.getElementById('waChipStatusRow');
+  const sdrFilterEl = document.getElementById('waSDRFilter');
+
   if (!config.evolutionUrl || !config.evolutionToken) {
     if (chipStatus) { chipStatus.textContent = 'SEM CONFIG'; chipStatus.style.background = 'rgba(255,45,85,.1)'; chipStatus.style.color = 'var(--danger)'; }
     return;
@@ -965,13 +984,33 @@ async function checkAllChips() {
     const res = await fetch(config.evolutionUrl + '/instance/fetchInstances', { headers: evoHeaders() });
     const data = await res.json();
     const instances = Array.isArray(data) ? data : [];
+    availableInstances = instances;
+
     if (!instances.length) {
       if (chipStatus) chipStatus.textContent = 'SEM INSTÂNCIA';
       return;
     }
-    // Verifica status de cada instância
-    let html = '<span style="color:var(--muted)">Chips:</span>';
+
+    // Atualiza select de chips
+    if (chipFilterEl) {
+      chipFilterEl.innerHTML = instances.map(inst => {
+        const name = inst.instance?.instanceName || inst.instanceName || inst.name || '?';
+        return `<option value="${name}">${name}</option>`;
+      }).join('');
+      if (config.evolutionInstance) chipFilterEl.value = config.evolutionInstance;
+    }
+
+    // Atualiza select de SDRs com base nos mapeamentos
+    if (sdrFilterEl) {
+      const currentVal = sdrFilterEl.value;
+      sdrFilterEl.innerHTML = '<option value="all">Todos</option>' +
+        sdrMappings.map(m => `<option value="${m.instance}">${m.sdrName}</option>`).join('');
+      sdrFilterEl.value = currentVal || 'all';
+    }
+
+    // Verifica status de cada instância e mostra badges
     let anyConnected = false;
+    let statusHtml = '';
     for (const inst of instances) {
       const name = inst.instance?.instanceName || inst.instanceName || inst.name || '?';
       try {
@@ -980,35 +1019,111 @@ async function checkAllChips() {
         const state = sd.instance?.state || sd.state || 'unknown';
         const connected = state === 'open';
         if (connected) anyConnected = true;
-        html += `<span style="display:inline-flex;align-items:center;gap:4px;margin-left:8px;padding:2px 8px;border-radius:20px;background:${connected?'rgba(0,229,160,.1)':'rgba(255,45,85,.1)'};color:${connected?'var(--accent)':'var(--danger)'}">
-          <span style="width:6px;height:6px;border-radius:50%;background:${connected?'var(--accent)':'var(--danger)'};display:inline-block"></span>
-          ${name}
+        // Descobre SDR mapeado para esse chip
+        const mapping = sdrMappings.find(m => m.instance === name);
+        const sdrLabel = mapping ? ` · ${mapping.sdrName}` : '';
+        statusHtml += `<span style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:20px;background:${connected?'rgba(0,229,160,.1)':'rgba(255,45,85,.1)'};color:${connected?'var(--accent)':'var(--danger)'}">
+          <span style="width:5px;height:5px;border-radius:50%;background:${connected?'var(--accent)':'var(--danger)'};display:inline-block"></span>
+          ${name}${sdrLabel}
         </span>`;
-      } catch { html += `<span style="margin-left:8px;color:var(--muted)">${name}: erro</span>`; }
+      } catch { statusHtml += `<span style="color:var(--muted);font-size:9px">${name}: erro</span>`; }
     }
-    if (chipBar) chipBar.innerHTML = html;
+    if (chipStatusRow) chipStatusRow.innerHTML = statusHtml;
     if (chipStatus) {
       chipStatus.textContent = anyConnected ? 'CONECTADO' : 'DESCONECTADO';
       chipStatus.style.background = anyConnected ? 'rgba(0,229,160,.1)' : 'rgba(255,45,85,.1)';
       chipStatus.style.color = anyConnected ? 'var(--accent)' : 'var(--danger)';
     }
-    // Carrega conversas
+
+    // Também atualiza o mapping editor se estiver aberto
+    renderSDRMappingList();
     await loadWAConversations();
   } catch(e) {
     if (chipStatus) { chipStatus.textContent = 'ERRO'; }
   }
 }
 
+function onSDRFilterChange() {
+  const sel = document.getElementById('waSDRFilter').value;
+  const chipSel = document.getElementById('waChipFilter');
+  if (sel !== 'all') {
+    // Seleciona automaticamente o chip do SDR
+    if (chipSel) chipSel.value = sel;
+  }
+  loadWAConversations();
+}
+
+// ── SDR MAPPING EDITOR ─────────────────────────────────────────────
+function renderSDRMappingList() {
+  const el = document.getElementById('sdrChipMappingList');
+  if (!el) return;
+  if (!sdrMappings.length) {
+    el.innerHTML = '<div style="font-size:11px;color:var(--muted);font-family:var(--mono)">Nenhum SDR mapeado. Clique em + Adicionar SDR.</div>';
+    return;
+  }
+  el.innerHTML = sdrMappings.map((m, i) => `
+    <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:7px;align-items:center">
+      <input type="text" class="form-input" style="font-size:10px;padding:6px 9px" placeholder="Nome do SDR" value="${m.sdrName}"
+        oninput="sdrMappings[${i}].sdrName=this.value">
+      <select class="form-select" style="font-size:10px;padding:6px 9px" onchange="sdrMappings[${i}].instance=this.value">
+        <option value="">Selecione chip...</option>
+        ${availableInstances.map(inst => {
+          const name = inst.instance?.instanceName || inst.instanceName || inst.name || '?';
+          return `<option value="${name}" ${m.instance===name?'selected':''}>${name}</option>`;
+        }).join('')}
+      </select>
+      <button class="btn-danger" style="padding:5px 9px;font-size:11px" onclick="removeSDRMapping(${i})">✕</button>
+    </div>`).join('');
+}
+
+function addSDRMapping() {
+  sdrMappings.push({ sdrName: '', instance: '' });
+  renderSDRMappingList();
+}
+
+function removeSDRMapping(i) {
+  sdrMappings.splice(i, 1);
+  renderSDRMappingList();
+}
+
+function saveSDRMappings() {
+  localStorage.setItem('sdr_mappings', JSON.stringify(sdrMappings));
+  // Atualiza o select de SDRs no dashboard
+  const sdrFilterEl = document.getElementById('waSDRFilter');
+  if (sdrFilterEl) {
+    sdrFilterEl.innerHTML = '<option value="all">Todos</option>' +
+      sdrMappings.map(m => `<option value="${m.instance}">${m.sdrName}</option>`).join('');
+  }
+  showToast('Mapeamentos salvos!', 'ok');
+}
+
 async function loadWAConversations() {
   const list = document.getElementById('waDashConvList');
-  if (!config.evolutionUrl || !config.evolutionToken || !config.evolutionInstance) return;
+  if (!config.evolutionUrl || !config.evolutionToken) return;
+
+  // Usa o chip selecionado no filtro, fallback para instância padrão
+  const chipSel = document.getElementById('waChipFilter');
+  const sdrSel = document.getElementById('waSDRFilter');
+  const instance = (chipSel?.value) || config.evolutionInstance;
+  if (!instance) return;
+
+  // Descobre SDR do chip selecionado
+  const sdrVal = sdrSel?.value || 'all';
+  const mapping = sdrMappings.find(m => m.instance === instance);
+  const sdrLabel = mapping ? mapping.sdrName : (sdrVal !== 'all' ? sdrVal : null);
+
+  if (list) list.innerHTML = '<div style="padding:16px;text-align:center;font-family:var(--mono);font-size:10px;color:var(--muted)">⏳ Carregando conversas...</div>';
+
   try {
-    const res = await fetch(config.evolutionUrl + '/chat/findChats/' + config.evolutionInstance, { headers: evoHeaders() });
-    if (!res.ok) return;
+    const res = await fetch(config.evolutionUrl + '/chat/findChats/' + instance, { headers: evoHeaders() });
+    if (!res.ok) {
+      if (list) list.innerHTML = `<div class="empty-state" style="padding:16px"><div class="empty-sub">Erro ${res.status} — verifique a instância "${instance}".</div></div>`;
+      return;
+    }
     const data = await res.json();
-    const chats = Array.isArray(data) ? data.slice(0, 8) : [];
+    const chats = Array.isArray(data) ? data.slice(0, 15) : [];
     if (!chats.length) {
-      if (list) list.innerHTML = '<div class="empty-state" style="padding:16px"><div class="empty-sub">Nenhuma conversa recente.</div></div>';
+      if (list) list.innerHTML = '<div class="empty-state" style="padding:16px"><div class="empty-sub">Nenhuma conversa recente neste chip.</div></div>';
       return;
     }
     if (list) list.innerHTML = chats.map(c => {
@@ -1018,19 +1133,31 @@ async function loadWAConversations() {
       const ts = c.lastMessage?.messageTimestamp;
       const time = ts ? new Date(ts*1000).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}) : '';
       const unread = c.unreadCount || 0;
+      // Calcula tempo sem resposta
+      const diffMin = ts ? Math.floor((Date.now()/1000 - ts) / 60) : null;
+      const semResp = unread > 0 && diffMin !== null;
+      const tempStr = diffMin !== null ? (diffMin < 60 ? diffMin+'min' : Math.floor(diffMin/60)+'h '+('0'+diffMin%60).slice(-2)+'min') : '';
+      const colors = ['linear-gradient(135deg,#0066ff,#00e5a0)','linear-gradient(135deg,#ff6b35,#ff2d55)','linear-gradient(135deg,#7c3aed,#0066ff)','linear-gradient(135deg,#00b4d8,#00e5a0)'];
+      const bg = colors[Math.abs(name.charCodeAt(0)-65) % colors.length];
       return `<div class="call-item">
-        <div class="call-avatar" style="background:linear-gradient(135deg,var(--accent2),var(--accent))">${initials}</div>
+        <div class="call-avatar" style="background:${bg}">${initials}</div>
         <div class="call-info">
           <div class="call-top">
             <div class="call-name">${name}</div>
             <div class="call-time">${time}</div>
           </div>
           <div class="call-meta" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:200px">${lastMsg}</div>
-          ${unread>0?`<div class="call-tags"><span class="tag tag-warn">SEM RESPOSTA (${unread})</span></div>`:''}
+          <div class="call-tags">
+            ${semResp ? `<span class="tag tag-warn">SEM RESP ${tempStr}</span>` : ''}
+            ${sdrLabel ? `<span class="tag tag-ms">${sdrLabel}</span>` : ''}
+            ${unread > 0 ? `<span class="tag" style="background:rgba(255,45,85,.1);color:var(--danger)">${unread} não lida${unread>1?'s':''}</span>` : ''}
+          </div>
         </div>
       </div>`;
     }).join('');
-  } catch(e) { /* silencioso */ }
+  } catch(e) {
+    if (list) list.innerHTML = `<div class="empty-state" style="padding:16px"><div class="empty-sub">Erro: ${e.message}</div></div>`;
+  }
 }
 
 async function checkWAStatus() {
@@ -1888,6 +2015,16 @@ window.onload = async () => {
     renderRDStages();
     populateStageTriggerSelect();
   }
+
+  // Inicializa mapeamento SDR→chip
+  sdrMappings = JSON.parse(localStorage.getItem('sdr_mappings') || '[]');
+  renderSDRMappingList();
+
+  // Auto-refresh conversas a cada 30s
+  setInterval(() => {
+    const chipSel = document.getElementById('waChipFilter');
+    if (chipSel && chipSel.value) loadWAConversations();
+  }, 30000);
 };
 </script>
 </body>
