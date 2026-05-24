@@ -1200,17 +1200,30 @@ async function loadWAConversations(instanceName) {
     // Helper: converte ID @lid/@s.whatsapp.net para número legível
     function formatWAId(rawId) {
       if (!rawId) return '';
-      // Remove sufixos
-      let id = String(rawId).replace('@s.whatsapp.net','').replace('@lid','').replace('@g.us','(grupo)');
-      // Se parece número (só dígitos), formata como telefone BR
-      if (/^\d{10,13}$/.test(id)) {
-        // Ex: 5511999998888 → +55 (11) 99999-8888
-        const ddi = id.slice(0,2);           // 55
-        const ddd = id.slice(2,4);           // 11
-        const rest = id.slice(4);            // 999998888
-        const p1 = rest.length > 8 ? rest.slice(0,-4) : rest.slice(0,-4);
-        const p2 = rest.slice(-4);
-        return '+' + ddi + ' (' + ddd + ') ' + p1 + '-' + p2;
+      let id = String(rawId)
+        .replace('@s.whatsapp.net','')
+        .replace('@lid','')
+        .replace(/@g\.us.*/,'')
+        .replace(/:.*$/,'')   // remove sufixo de device :0, :1 etc
+        .trim();
+      if (id.includes('@g.us') || rawId.includes('@g.us')) return '👥 Grupo';
+      // Números com 10–15 dígitos: formata como BR
+      if (/^\d{10,15}$/.test(id)) {
+        // Normaliza: se começa com 55 e tem dígito 9 extra no cel (13 dígitos), remove o 9
+        if (id.length === 13 && id.startsWith('55')) {
+          const ddd = id.slice(2,4);
+          const num = id.slice(4);
+          // se 9 dígitos e começa com 9, remove o primeiro 9
+          const numFmt = num.length === 9 ? num.slice(0,5) + '-' + num.slice(5) : num.slice(0,4) + '-' + num.slice(4);
+          return '+55 (' + ddd + ') ' + numFmt;
+        }
+        if (id.length === 12 && id.startsWith('55')) {
+          const ddd = id.slice(2,4);
+          const num = id.slice(4);
+          return '+55 (' + ddd + ') ' + num.slice(0,4) + '-' + num.slice(4);
+        }
+        // Outro formato: mostra como está
+        return id;
       }
       return id;
     }
@@ -1236,15 +1249,25 @@ async function loadWAConversations(instanceName) {
         .trim().split(/\s+/).filter(Boolean)
         .map(w=>w[0]).join('').substring(0,2).toUpperCase() || '?';
 
-      // Mensagem: tenta vários campos da Evolution v1/v2
-      const msg = c.lastMessage?.message?.conversation
-        || c.lastMessage?.message?.extendedTextMessage?.text
-        || c.lastMessage?.message?.imageMessage?.caption
-        || c.lastMessage?.body
-        || c.lastMessage?.text
-        || c.preview
-        || '';
-      const lastMsg = msg ? (msg.length > 50 ? msg.substring(0,50)+'…' : msg) : '(sem mensagem)';
+      // Mensagem: percorre todos os campos possíveis da Evolution v1/v2
+      function extractMsgText(lm) {
+        if (!lm) return '';
+        const m = lm.message || lm;
+        return m?.conversation
+          || m?.extendedTextMessage?.text
+          || m?.imageMessage?.caption
+          || m?.videoMessage?.caption
+          || m?.documentMessage?.title
+          || m?.buttonsResponseMessage?.selectedDisplayText
+          || m?.listResponseMessage?.title
+          || m?.templateButtonReplyMessage?.selectedDisplayText
+          || m?.audioMessage && '🎵 Áudio'
+          || m?.stickerMessage && '🎭 Sticker'
+          || m?.locationMessage && '📍 Localização'
+          || lm?.body || lm?.text || lm?.content || '';
+      }
+      const msg = extractMsgText(c.lastMessage) || c.preview || c.snippet || '';
+      const lastMsg = msg ? (msg.length > 55 ? msg.substring(0,55)+'…' : msg) : '';
 
       const ts = getTs(c);
       const now = Date.now() / 1000;
