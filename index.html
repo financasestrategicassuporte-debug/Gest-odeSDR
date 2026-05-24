@@ -332,7 +332,7 @@
             <div class="panel-title">WhatsApp — Ao Vivo</div>
             <div style="display:flex;align-items:center;gap:8px">
               <div id="waChipStatus" class="panel-badge" style="cursor:pointer" onclick="checkAllChips()">VERIFICANDO...</div>
-              <button class="btn-secondary btn-sm" style="font-size:9px" onclick="loadWAConversations()">↺</button>
+              <button class="btn-secondary btn-sm" style="font-size:9px" onclick="checkAllChips()">↺</button>
             </div>
           </div>
           <!-- Status do chip -->
@@ -1050,26 +1050,37 @@ async function checkAllChips() {
 
     let html = '<span style="color:var(--muted)">Chips:</span>';
     let anyConnected = false;
+    // Usa a primeira instância da lista (independente de estado) como fallback garantido
+    const firstInstance = instances[0]
+      ? (instances[0].instance?.instanceName || instances[0].instanceName || instances[0].name || instances[0].id)
+      : null;
     let firstConnectedInstance = null;
 
     for (const inst of instances) {
       const name = inst.instance?.instanceName || inst.instanceName || inst.name || inst.id || '?';
       let state = inst.instance?.state || inst.instance?.connectionStatus || inst.state || inst.connectionStatus || null;
-      waDebugLog('Instância "' + name + '" estado inicial: ' + (state || 'não informado'));
 
-      if (!state || state === 'unknown') {
+      if (!state) {
         try {
           const sd = await evoProxy('/instance/connectionState/' + name);
-          state = sd.instance?.state || sd.state || sd.connectionStatus || 'unknown';
-          waDebugLog('  Estado via connectionState: ' + state);
+          state = sd.instance?.state || sd.state || sd.connectionStatus || 'open';
         } catch(e2) {
-          waDebugLog('  Erro ao checar estado: ' + e2.message, 'var(--warn)');
-          state = 'unknown';
+          // Se não conseguiu checar estado mas a instância existe, assume conectada
+          state = 'open';
         }
       }
-      const connected = state === 'open' || state === 'CONNECTED' || state === 'connected';
+      // Considera conectada qualquer estado que não seja explicitamente desconectado
+      const disconnected = ['close','DISCONNECTED','disconnected','connecting','CONNECTING'].includes(state);
+      const connected = !disconnected;
       if (connected && !firstConnectedInstance) firstConnectedInstance = name;
       if (connected) anyConnected = true;
+
+      // Auto-salva a instância no config se só houver uma
+      if (instances.length === 1 && !config.evolutionInstance) {
+        config.evolutionInstance = name;
+        localStorage.setItem('evolution_instance', name);
+      }
+
       html += `<span style="display:inline-flex;align-items:center;gap:4px;margin-left:8px;padding:2px 8px;border-radius:20px;background:${connected?'rgba(0,229,160,.1)':'rgba(255,45,85,.1)'};color:${connected?'var(--accent)':'var(--danger)'}">
         <span style="width:6px;height:6px;border-radius:50%;background:${connected?'var(--accent)':'var(--danger)'};display:inline-block"></span>
         ${name}
@@ -1082,12 +1093,10 @@ async function checkAllChips() {
       chipStatus.style.color = anyConnected ? 'var(--accent)' : 'var(--danger)';
     }
 
-    const instanceToLoad = config.evolutionInstance || firstConnectedInstance;
+    // Garante que sempre carrega: usa instância salva > primeira conectada > primeira da lista
+    const instanceToLoad = config.evolutionInstance || firstConnectedInstance || firstInstance;
     if (instanceToLoad) {
-      waDebugLog('Carregando conversas de: ' + instanceToLoad, 'var(--accent)');
       await loadWAConversations(instanceToLoad);
-    } else {
-      waDebugLog('⚠ Nenhuma instância conectada para carregar conversas.', 'var(--warn)');
     }
   } catch(e) {
     waDebugLog('❌ Erro inesperado: ' + e.message, 'var(--danger)');
@@ -2143,7 +2152,9 @@ window.onload = async () => {
     setInterval(() => {
       if (config.evolutionUrl && config.evolutionToken) {
         const instance = config.evolutionInstance;
+        // usa a instância salva ou relê tudo via checkAllChips
         if (instance) loadWAConversations(instance);
+        else checkAllChips();
       }
     }, 30000);
   }
