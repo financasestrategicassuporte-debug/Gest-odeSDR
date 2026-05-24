@@ -976,29 +976,18 @@ async function sendWhatsApp() {
 
 // ── WHATSAPP AO VIVO ──────────────────────────────────────────────
 async function evoProxy(path, method='GET', body=null) {
-  // Tenta via proxy Vercel primeiro (evita CORS). Fallback: direto.
-  const headers = { 'Content-Type': 'application/json' };
-  const proxyPayload = {
-    service: '__evo__',
-    evoUrl: config.evolutionUrl,
-    evoToken: config.evolutionToken,
-    path, method,
-    body: body || undefined
+  // Chamada direta à Evolution API (CORS deve estar liberado no servidor)
+  const opts = {
+    method,
+    headers: { 'Content-Type': 'application/json', 'apikey': config.evolutionToken }
   };
-  try {
-    const r = await fetch('/api/proxy', { method:'POST', headers, body: JSON.stringify(proxyPayload) });
-    // Se proxy retornar 400 com "serviço desconhecido" significa proxy online mas sem suporte a evo
-    if (r.status === 400) throw new Error('proxy_no_evo');
-    if (r.ok) return r.json();
-    throw new Error('proxy_http_' + r.status);
-  } catch(proxyErr) {
-    // Fallback: chamada direta (funciona se Evolution tiver CORS liberado)
-    const directOpts = { method, headers: { 'Content-Type': 'application/json', 'apikey': config.evolutionToken } };
-    if (body) directOpts.body = JSON.stringify(body);
-    const r2 = await fetch(config.evolutionUrl + path, directOpts);
-    if (!r2.ok) throw new Error('HTTP ' + r2.status + ' (direto)');
-    return r2.json();
+  if (body) opts.body = JSON.stringify(body);
+  const r = await fetch(config.evolutionUrl + path, opts);
+  if (!r.ok) {
+    const errText = await r.text().catch(() => '');
+    throw new Error('HTTP ' + r.status + (errText ? ': ' + errText.substring(0,80) : ''));
   }
+  return r.json();
 }
 
 function waDebugLog(msg, color='var(--muted)') {
@@ -1148,6 +1137,23 @@ async function loadWAConversations(instanceName) {
       return;
     }
     waDebugLog('✓ ' + chats.length + ' conversas carregadas', 'var(--accent)');
+    // Log raw fields of first chat to diagnose unread/timestamp field names
+    if (rawChats[0]) {
+      const sample = rawChats[0];
+      const fields = {
+        id: sample.id,
+        unreadCount: sample.unreadCount,
+        unreadMessages: sample.unreadMessages,
+        unread: sample.unread,
+        notSpam: sample.notSpam,
+        lastMsgTimestamp: sample.lastMsgTimestamp,
+        updatedAt: sample.updatedAt,
+        lastMessageTs: sample.lastMessage?.messageTimestamp,
+        pushName: sample.pushName,
+        name: sample.name,
+      };
+      waDebugLog('📊 Campos raw: ' + JSON.stringify(fields).substring(0, 200), 'var(--ms)');
+    }
 
     // Helper: converte ID @lid/@s.whatsapp.net para número legível
     function formatWAId(rawId) {
