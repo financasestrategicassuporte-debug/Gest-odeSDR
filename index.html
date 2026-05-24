@@ -572,18 +572,30 @@
                     </div>
                   </div>
                   <div class="int-block-body" id="intBody_rd" style="display:none">
-                    <div class="form-group"><label class="form-label">Access Token (OAuth RD Station)</label><input type="password" class="form-input" id="i_rdAccessToken" placeholder="Cole aqui o access_token gerado pelo OAuth"></div>
+                    <div class="form-group">
+                      <label class="form-label">Tipo de Token</label>
+                      <select class="form-select" id="i_rdTokenType" onchange="toggleRdTokenHelp()">
+                        <option value="api_token">API Token (token simples — padrão)</option>
+                        <option value="oauth">OAuth 2.0 Bearer Token</option>
+                      </select>
+                    </div>
+                    <div class="form-group"><label class="form-label">Token de Acesso</label><input type="password" class="form-input" id="i_rdAccessToken" placeholder="Cole aqui seu token do RD Station" value="6a0006cde22509001320dd04"></div>
                     <div class="two-col">
-                      <div class="form-group"><label class="form-label">Client ID</label><input type="text" class="form-input" id="i_rdClientId" placeholder="seu-client-id"></div>
-                      <div class="form-group"><label class="form-label">Client Secret</label><input type="password" class="form-input" id="i_rdClientSecret" placeholder="seu-client-secret"></div>
+                      <div class="form-group"><label class="form-label">Client ID / ID da Conta</label><input type="text" class="form-input" id="i_rdClientId" placeholder="ex: aceleradora-de-academias" value="aceleradora-de-academias"></div>
+                      <div class="form-group"><label class="form-label">Client Secret</label><input type="password" class="form-input" id="i_rdClientSecret" placeholder="(necessário apenas para OAuth)"></div>
                     </div>
                     <div class="form-group"><label class="form-label">ID do Pipeline/Funil</label><input type="text" class="form-input" id="i_rdPipelineId" placeholder="ID do pipeline (opcional)"></div>
-                    <div style="background:var(--bg);border-radius:6px;padding:10px 12px;font-family:var(--mono);font-size:11px;color:var(--muted);margin-bottom:12px;line-height:1.8">
-                      <strong style="color:var(--text)">Como gerar o Access Token:</strong><br>
-                      1. app.rdstation.com.br → Configurações → Integrações → API<br>
-                      2. Crie um App OAuth com redirect_uri = http://localhost<br>
+                    <div id="rdTokenHelp_api" style="background:var(--bg);border-radius:6px;padding:10px 12px;font-family:var(--mono);font-size:11px;color:var(--muted);margin-bottom:12px;line-height:1.8">
+                      <strong style="color:var(--accent)">✓ Modo API Token (seu token já está preenchido)</strong><br>
+                      Seu token <span style="color:var(--text)">6a0006cde22509001320dd04</span> será enviado como parâmetro <span style="color:var(--text)">?token=...</span> nas chamadas ao CRM.<br>
+                      Se der erro 401, gere um novo token em: app.rdstation.com.br → Configurações → Integrações → API → Token Pessoal
+                    </div>
+                    <div id="rdTokenHelp_oauth" style="display:none;background:var(--bg);border-radius:6px;padding:10px 12px;font-family:var(--mono);font-size:11px;color:var(--muted);margin-bottom:12px;line-height:1.8">
+                      <strong style="color:var(--text)">Como gerar OAuth Bearer Token:</strong><br>
+                      1. app.rdstation.com.br → Configurações → Integrações → API → Criar App OAuth<br>
+                      2. redirect_uri = http://localhost<br>
                       3. Acesse: https://api.rd.services/auth/dialog?client_id=SEU_ID&redirect_uri=http://localhost&response_type=code<br>
-                      4. Troque o code por token via POST /auth/token
+                      4. Troque o code por Bearer token via POST /auth/token
                     </div>
                     <div style="display:flex;gap:8px;align-items:center">
                       <button class="btn-primary btn-sm" onclick="saveAndTest('rd')">💾 Salvar e Testar</button>
@@ -849,9 +861,11 @@
 let config = {
   supabaseUrl: localStorage.getItem('sb_url') || '',
   supabaseKey: localStorage.getItem('sb_key') || '',
-  rdClientId: localStorage.getItem('rd_client_id') || '',
+  rdClientId: localStorage.getItem('rd_client_id') || 'aceleradora-de-academias',
   rdClientSecret: localStorage.getItem('rd_client_secret') || '',
-  rdAccessToken: localStorage.getItem('rd_access_token') || '',
+  rdAccessToken: localStorage.getItem('rd_access_token') || '6a0006cde22509001320dd04',
+  rdApiToken: localStorage.getItem('rd_api_token') || '6a0006cde22509001320dd04',
+  rdTokenType: localStorage.getItem('rd_token_type') || 'api_token',
   rdPipelineId: localStorage.getItem('rd_pipeline_id') || '',
   evolutionUrl: localStorage.getItem('evolution_url') || '',
   evolutionToken: localStorage.getItem('evolution_token') || '',
@@ -879,10 +893,20 @@ function toggleInt(key) {
   if (open) prefillInlineFields(key);
 }
 
+function toggleRdTokenHelp() {
+  const sel = document.getElementById('i_rdTokenType');
+  if (!sel) return;
+  const isApi = sel.value === 'api_token';
+  const apiHelp = document.getElementById('rdTokenHelp_api');
+  const oauthHelp = document.getElementById('rdTokenHelp_oauth');
+  if (apiHelp) apiHelp.style.display = isApi ? 'block' : 'none';
+  if (oauthHelp) oauthHelp.style.display = isApi ? 'none' : 'block';
+}
+
 function prefillInlineFields(key) {
   const map = {
     supabase: [['i_supabaseUrl','supabaseUrl'],['i_supabaseKey','supabaseKey']],
-    rd: [['i_rdAccessToken','rdAccessToken'],['i_rdClientId','rdClientId'],['i_rdClientSecret','rdClientSecret'],['i_rdPipelineId','rdPipelineId']],
+    rd: [['i_rdAccessToken','rdApiToken'],['i_rdClientId','rdClientId'],['i_rdClientSecret','rdClientSecret'],['i_rdPipelineId','rdPipelineId'],['i_rdTokenType','rdTokenType']],
     evolution: [['i_evolutionUrl','evolutionUrl'],['i_evolutionToken','evolutionToken'],['i_evolutionInstance','evolutionInstance']],
     claude: [['i_claudeApiKey','claudeApiKey']]
   };
@@ -897,7 +921,7 @@ async function saveAndTest(key) {
   const resultEl = document.getElementById('inlineResult_' + key);
   const storageMap = {
     supabase: [['i_supabaseUrl','supabaseUrl','sb_url'],['i_supabaseKey','supabaseKey','sb_key']],
-    rd: [['i_rdAccessToken','rdAccessToken','rd_access_token'],['i_rdClientId','rdClientId','rd_client_id'],['i_rdClientSecret','rdClientSecret','rd_client_secret'],['i_rdPipelineId','rdPipelineId','rd_pipeline_id']],
+    rd: [['i_rdAccessToken','rdApiToken','rd_api_token'],['i_rdClientId','rdClientId','rd_client_id'],['i_rdClientSecret','rdClientSecret','rd_client_secret'],['i_rdPipelineId','rdPipelineId','rd_pipeline_id'],['i_rdTokenType','rdTokenType','rd_token_type']],
     evolution: [['i_evolutionUrl','evolutionUrl','evolution_url'],['i_evolutionToken','evolutionToken','evolution_token'],['i_evolutionInstance','evolutionInstance','evolution_instance']],
     claude: [['i_claudeApiKey','claudeApiKey','claude_key']]
   };
@@ -939,16 +963,37 @@ async function _testSupabase(resultEl) {
 
 async function _testRDStation(resultEl) {
   try {
-    if (!config.rdAccessToken) throw new Error('Access Token não preenchido');
-    const res = await fetch('https://crm.rdstation.com/api/v1/users?limit=1', {
-      headers: { 'Authorization': 'Bearer ' + config.rdAccessToken, 'Content-Type': 'application/json' }
+    const token = config.rdApiToken || config.rdAccessToken;
+    if (!token) throw new Error('Preencha o Access Token');
+
+    // Tenta API Token (modo legado) primeiro
+    config.rdTokenType = 'api_token';
+    config.rdApiToken = token;
+    localStorage.setItem('rd_token_type', 'api_token');
+    localStorage.setItem('rd_api_token', token);
+
+    let res = await fetch('https://crm.rdstation.com/api/v1/users?limit=1&token=' + encodeURIComponent(token), {
+      headers: { 'Content-Type': 'application/json' }
     });
+
+    if (!res.ok && res.status === 401) {
+      // Tenta OAuth Bearer como fallback
+      config.rdTokenType = 'oauth';
+      localStorage.setItem('rd_token_type', 'oauth');
+      res = await fetch('https://crm.rdstation.com/api/v1/users?limit=1', {
+        headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' }
+      });
+    }
+
     if (res.ok) {
       setConnected('rdStatus', true, 'CONECTADO');
       resultEl.style.color = 'var(--accent)';
-      resultEl.textContent = '✓ RD Station conectado!';
+      resultEl.textContent = '✓ RD Station conectado! (modo: ' + config.rdTokenType + ')';
       await fetchRDStages();
-    } else { throw new Error('HTTP ' + res.status + ' — verifique o token'); }
+    } else {
+      const body = await res.text();
+      throw new Error('HTTP ' + res.status + ' — Token inválido ou sem permissão. Detalhes: ' + body.substring(0,120));
+    }
   } catch(e) {
     setConnected('rdStatus', false);
     resultEl.style.color = 'var(--danger)';
@@ -1087,7 +1132,7 @@ function updateStatuses() {
     el.className = 'integration-status ' + (ok ? 'connected' : 'disconnected');
   };
   set('supabaseStatus', config.supabaseUrl && config.supabaseKey);
-  set('rdStatus', config.rdAccessToken, 'TOKEN OK');
+  set('rdStatus', config.rdApiToken || config.rdAccessToken, 'TOKEN OK');
   set('evolutionStatus', config.evolutionUrl && config.evolutionToken);
   set('claudeStatus', config.claudeApiKey);
   if (config.claudeApiKey) {
@@ -1158,17 +1203,31 @@ async function saveLogToSupabase(log) {
 // RD STATION
 // ============================================================
 async function rdFetch(endpoint, method = 'GET', body = null) {
-  if (!config.rdAccessToken) throw new Error('Token RD Station não configurado');
-  const opts = {
-    method,
-    headers: {
-      'Authorization': 'Bearer ' + config.rdAccessToken,
-      'Content-Type': 'application/json'
-    }
-  };
+  // Suporta dois modos de autenticação:
+  // api_token: token legado passado como query param ?token=...
+  // oauth: Bearer token OAuth 2.0
+  const tokenType = config.rdTokenType || 'api_token';
+  const token = config.rdApiToken || config.rdAccessToken;
+  if (!token) throw new Error('Token RD Station não configurado — cole o token no campo Access Token');
+
+  let url, headers;
+  if (tokenType === 'api_token') {
+    const sep = endpoint.includes('?') ? '&' : '?';
+    url = 'https://crm.rdstation.com/api/v1/' + endpoint + sep + 'token=' + encodeURIComponent(token);
+    headers = { 'Content-Type': 'application/json' };
+  } else {
+    url = 'https://crm.rdstation.com/api/v1/' + endpoint;
+    headers = { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' };
+  }
+
+  const opts = { method, headers };
   if (body) opts.body = JSON.stringify(body);
-  const res = await fetch('https://crm.rdstation.com/api/v1/' + endpoint, opts);
-  if (!res.ok) throw new Error('RD Station HTTP ' + res.status);
+  const res = await fetch(url, opts);
+  if (!res.ok) {
+    let detail = '';
+    try { const err = await res.json(); detail = err.error || err.message || ''; } catch(e2) {}
+    throw new Error('RD Station HTTP ' + res.status + (detail ? ' — ' + detail : ''));
+  }
   return res.json();
 }
 
