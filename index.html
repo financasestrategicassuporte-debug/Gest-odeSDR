@@ -1179,13 +1179,18 @@ window.onload = async () => {
   updateStatuses();
   updateWebhookUrls();
   renderFlows();
-  renderRDStages();
-  populateStageTriggerSelect();
   checkProxy();
   document.getElementById('serverUrl').value = config.serverUrl || '';
-  // Auto-carrega etapas dos 3 funis se RD já estiver configurado
-  if (config.rdApiToken && !rdStages.length) {
-    setTimeout(() => fetchRDStages(), 1500);
+
+  // Invalida cache antigo sem pipelineName e re-busca sempre que tiver token
+  const hasOldCache = rdStages.length && !rdStages[0].pipelineName;
+  if (config.rdApiToken && (hasOldCache || !rdStages.length)) {
+    rdStages = [];
+    LS.set('rd_stages', '[]');
+    setTimeout(() => fetchRDStages(), 800);
+  } else {
+    renderRDStages();
+    populateStageTriggerSelect();
   }
 };
 </script>
