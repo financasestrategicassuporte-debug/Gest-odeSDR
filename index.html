@@ -517,16 +517,91 @@
   </div>
   <div class="flow-editor-body">
     <div class="flow-steps-panel">
-      <div class="form-group"><label class="form-label">Nome do Fluxo</label><input type="text" class="form-input" id="flowName" placeholder="Ex: Pós-contato inicial"></div>
-      <div class="form-group"><label class="form-label">Gatilho — Etapa RD Station</label><select class="form-select" id="flowTriggerStage"><option value="">Selecione...</option></select></div>
-      <div class="form-group"><label class="form-label">Ativo</label><select class="form-select" id="flowActive"><option value="true">Sim</option><option value="false">Não</option></select></div>
+
+      <!-- Cabeçalho do fluxo -->
+      <div style="margin-bottom:20px">
+        <div style="font-family:var(--mono);font-size:9px;letter-spacing:2px;color:var(--accent);margin-bottom:14px;text-transform:uppercase">◈ Configuração do Fluxo</div>
+
+        <!-- 1. Funil -->
+        <div class="form-group">
+          <label class="form-label">
+            <span style="color:var(--accent);margin-right:6px">①</span>Funil de Vendas
+          </label>
+          <select class="form-select" id="flowPipeline" onchange="onPipelineChange()">
+            <option value="">Selecione o funil...</option>
+          </select>
+        </div>
+
+        <!-- 2. Nome do fluxo -->
+        <div class="form-group">
+          <label class="form-label">
+            <span style="color:var(--accent);margin-right:6px">②</span>Nome do Fluxo
+          </label>
+          <input type="text" class="form-input" id="flowName" placeholder="Ex: Follow-up Leads Frios">
+        </div>
+
+        <!-- 3. Etapa gatilho (filtrada pelo funil selecionado) -->
+        <div class="form-group">
+          <label class="form-label">
+            <span style="color:var(--accent);margin-right:6px">③</span>Etapa Gatilho
+          </label>
+          <select class="form-select" id="flowTriggerStage" disabled>
+            <option value="">← Selecione o funil primeiro</option>
+          </select>
+          <div id="stageHint" style="font-family:var(--mono);font-size:9px;color:var(--muted);margin-top:5px">
+            O fluxo dispara quando um lead entrar nesta etapa
+          </div>
+        </div>
+
+        <!-- 4. Ativo -->
+        <div class="form-group">
+          <label class="form-label">
+            <span style="color:var(--accent);margin-right:6px">④</span>Status do Fluxo
+          </label>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+            <div id="activeBtn" onclick="setFlowActive(true)" style="padding:10px;border:1px solid var(--accent);border-radius:8px;text-align:center;cursor:pointer;background:rgba(0,229,160,.08)">
+              <div style="font-size:14px;margin-bottom:3px">✅</div>
+              <div style="font-family:var(--mono);font-size:9px;color:var(--accent)">ATIVO</div>
+            </div>
+            <div id="inactiveBtn" onclick="setFlowActive(false)" style="padding:10px;border:1px solid var(--border);border-radius:8px;text-align:center;cursor:pointer">
+              <div style="font-size:14px;margin-bottom:3px">⏸</div>
+              <div style="font-family:var(--mono);font-size:9px;color:var(--muted)">PAUSADO</div>
+            </div>
+          </div>
+          <input type="hidden" id="flowActive" value="true">
+        </div>
+      </div>
+
       <div class="divider"></div>
-      <div class="sidebar-label" style="margin-bottom:10px">ADICIONAR PASSO</div>
-      <div class="step-type-grid">
-        <div class="step-type-option" onclick="addStep('mensagem')"><div class="step-icon">💬</div><div class="step-label">MENSAGEM</div></div>
-        <div class="step-type-option" onclick="addStep('esperar')"><div class="step-icon">⏱</div><div class="step-label">ESPERAR</div></div>
-        <div class="step-type-option" onclick="addStep('condicao')"><div class="step-icon">🔀</div><div class="step-label">CONDIÇÃO</div></div>
-        <div class="step-type-option" onclick="addStep('acao_rd')"><div class="step-icon">📋</div><div class="step-label">AÇÃO CRM</div></div>
+
+      <!-- Adicionar passos -->
+      <div>
+        <div style="font-family:var(--mono);font-size:9px;letter-spacing:2px;color:var(--muted);margin-bottom:12px;text-transform:uppercase">◈ Adicionar Passo</div>
+        <div class="step-type-grid">
+          <div class="step-type-option" onclick="addStep('mensagem')">
+            <div class="step-icon">💬</div>
+            <div class="step-label">MENSAGEM</div>
+          </div>
+          <div class="step-type-option" onclick="addStep('esperar')">
+            <div class="step-icon">⏱</div>
+            <div class="step-label">ESPERAR</div>
+          </div>
+          <div class="step-type-option" onclick="addStep('condicao')">
+            <div class="step-icon">🔀</div>
+            <div class="step-label">CONDIÇÃO</div>
+          </div>
+          <div class="step-type-option" onclick="addStep('acao_rd')">
+            <div class="step-icon">📋</div>
+            <div class="step-label">AÇÃO CRM</div>
+          </div>
+        </div>
+
+        <div style="margin-top:14px;font-family:var(--mono);font-size:9px;color:var(--muted);line-height:1.9">
+          <strong style="color:var(--text)">Variáveis:</strong><br>
+          {{nome}} · {{empresa}}<br>
+          {{telefone}} · {{etapa}}<br>
+          {{sdr}} · {{resposta}}
+        </div>
       </div>
     </div>
     <div class="flow-canvas">
@@ -967,15 +1042,85 @@ function populateStageTriggerSelect() {
   if (cur) sel.value = cur;
 }
 
+// Controle do botão ativo/pausado
+function setFlowActive(active) {
+  document.getElementById('flowActive').value = active ? 'true' : 'false';
+  const activeBtn = document.getElementById('activeBtn');
+  const inactiveBtn = document.getElementById('inactiveBtn');
+  if (active) {
+    activeBtn.style.border = '1px solid var(--accent)';
+    activeBtn.style.background = 'rgba(0,229,160,.08)';
+    activeBtn.querySelector('div:last-child').style.color = 'var(--accent)';
+    inactiveBtn.style.border = '1px solid var(--border)';
+    inactiveBtn.style.background = 'transparent';
+    inactiveBtn.querySelector('div:last-child').style.color = 'var(--muted)';
+  } else {
+    inactiveBtn.style.border = '1px solid var(--warn)';
+    inactiveBtn.style.background = 'rgba(255,107,53,.08)';
+    inactiveBtn.querySelector('div:last-child').style.color = 'var(--warn)';
+    activeBtn.style.border = '1px solid var(--border)';
+    activeBtn.style.background = 'transparent';
+    activeBtn.querySelector('div:last-child').style.color = 'var(--muted)';
+  }
+}
+
+// Ao selecionar funil — filtra etapas
+function onPipelineChange() {
+  const pipelineId = document.getElementById('flowPipeline').value;
+  const stageSel = document.getElementById('flowTriggerStage');
+  stageSel.innerHTML = '';
+
+  if (!pipelineId) {
+    stageSel.disabled = true;
+    stageSel.innerHTML = '<option value="">← Selecione o funil primeiro</option>';
+    return;
+  }
+
+  const filtered = rdStages.filter(s => s.pipelineId === pipelineId);
+  stageSel.disabled = false;
+  stageSel.innerHTML = '<option value="">Selecione a etapa gatilho...</option>';
+  filtered.forEach(s => {
+    const o = document.createElement('option');
+    o.value = s.id;
+    o.textContent = s.name;
+    stageSel.appendChild(o);
+  });
+}
+
+// Preenche o select de pipelines
+function populatePipelineSelect(selectedId) {
+  const sel = document.getElementById('flowPipeline');
+  if (!sel) return;
+  sel.innerHTML = '<option value="">Selecione o funil...</option>';
+  GFB_PIPELINES.forEach(p => {
+    const o = document.createElement('option');
+    o.value = p.id;
+    o.textContent = p.name;
+    if (p.id === selectedId) o.selected = true;
+    sel.appendChild(o);
+  });
+}
+
 function openFlowEditor(flowId) {
   editingFlowId = flowId;
   const flow = flowId ? flows.find(f=>f.id===flowId) : null;
   document.getElementById('flowEditorTitle').textContent = flow ? 'Editar: '+flow.name : 'Novo Fluxo';
   document.getElementById('flowName').value = flow?.name || '';
-  document.getElementById('flowActive').value = flow?.active!==false ? 'true' : 'false';
   currentSteps = JSON.parse(JSON.stringify(flow?.steps||[]));
-  const sel = document.getElementById('flowTriggerStage');
-  if (sel) sel.value = flow?.triggerStage || '';
+
+  // Preenche funil e etapa
+  const pipelineId = flow?.pipelineId || '';
+  populatePipelineSelect(pipelineId);
+  if (pipelineId) {
+    onPipelineChange();
+    const stageSel = document.getElementById('flowTriggerStage');
+    if (stageSel) stageSel.value = flow?.triggerStage || '';
+  }
+
+  // Estado ativo/pausado
+  const isActive = flow?.active !== false;
+  setFlowActive(isActive);
+
   renderStepsCanvas();
   document.getElementById('flowEditor').classList.add('active');
 }
@@ -985,11 +1130,17 @@ function closeFlowEditor() { document.getElementById('flowEditor').classList.rem
 function saveFlow() {
   const name = document.getElementById('flowName').value.trim();
   if (!name) { showToast('Dê um nome ao fluxo','err'); return; }
+  const pipelineId = document.getElementById('flowPipeline').value;
+  const pipeline = GFB_PIPELINES.find(p => p.id === pipelineId);
   const flow = {
     id: editingFlowId || 'flow_'+Date.now(),
-    name, triggerStage: document.getElementById('flowTriggerStage').value,
-    active: document.getElementById('flowActive').value==='true',
-    steps: currentSteps, updatedAt: new Date().toISOString()
+    name,
+    pipelineId: pipelineId,
+    pipelineName: pipeline?.name || '',
+    triggerStage: document.getElementById('flowTriggerStage').value,
+    active: document.getElementById('flowActive').value === 'true',
+    steps: currentSteps,
+    updatedAt: new Date().toISOString()
   };
   if (editingFlowId) { const idx=flows.findIndex(f=>f.id===editingFlowId); if(idx>=0) flows[idx]=flow; else flows.push(flow); }
   else flows.push(flow);
