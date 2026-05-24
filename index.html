@@ -956,35 +956,43 @@ async function sendWhatsApp() {
 async function checkAllChips() {
   const chipBar = document.getElementById('waChipBar');
   const chipStatus = document.getElementById('waChipStatus');
-  const chipName = document.getElementById('waChipName');
   if (!config.evolutionUrl || !config.evolutionToken) {
     if (chipStatus) { chipStatus.textContent = 'SEM CONFIG'; chipStatus.style.background = 'rgba(255,45,85,.1)'; chipStatus.style.color = 'var(--danger)'; }
     return;
   }
   try {
     const res = await fetch(config.evolutionUrl + '/instance/fetchInstances', { headers: evoHeaders() });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
     const data = await res.json();
-    const instances = Array.isArray(data) ? data : [];
+    // A Evolution pode retornar array direto ou objeto com array dentro
+    const instances = Array.isArray(data) ? data : (data.instances || data.data || []);
     if (!instances.length) {
-      if (chipStatus) chipStatus.textContent = 'SEM INSTÂNCIA';
+      if (chipStatus) { chipStatus.textContent = 'SEM INSTÂNCIA'; chipStatus.style.background = 'rgba(255,107,53,.1)'; chipStatus.style.color = 'var(--warn)'; }
       return;
     }
     // Verifica status de cada instância
     let html = '<span style="color:var(--muted)">Chips:</span>';
     let anyConnected = false;
+    let firstConnectedInstance = null;
     for (const inst of instances) {
-      const name = inst.instance?.instanceName || inst.instanceName || inst.name || '?';
-      try {
-        const sr = await fetch(config.evolutionUrl + '/instance/connectionState/' + name, { headers: evoHeaders() });
-        const sd = await sr.json();
-        const state = sd.instance?.state || sd.state || 'unknown';
-        const connected = state === 'open';
-        if (connected) anyConnected = true;
-        html += `<span style="display:inline-flex;align-items:center;gap:4px;margin-left:8px;padding:2px 8px;border-radius:20px;background:${connected?'rgba(0,229,160,.1)':'rgba(255,45,85,.1)'};color:${connected?'var(--accent)':'var(--danger)'}">
-          <span style="width:6px;height:6px;border-radius:50%;background:${connected?'var(--accent)':'var(--danger)'};display:inline-block"></span>
-          ${name}
-        </span>`;
-      } catch { html += `<span style="margin-left:8px;color:var(--muted)">${name}: erro</span>`; }
+      // Suporta diferentes formatos de resposta da Evolution API v1 e v2
+      const name = inst.instance?.instanceName || inst.instanceName || inst.name || inst.id || '?';
+      // Estado pode já vir no objeto sem precisar de segunda chamada
+      let state = inst.instance?.state || inst.state || inst.connectionStatus || null;
+      if (!state) {
+        try {
+          const sr = await fetch(config.evolutionUrl + '/instance/connectionState/' + name, { headers: evoHeaders() });
+          const sd = await sr.json();
+          state = sd.instance?.state || sd.state || sd.connectionStatus || 'unknown';
+        } catch { state = 'unknown'; }
+      }
+      const connected = state === 'open' || state === 'CONNECTED';
+      if (connected && !firstConnectedInstance) firstConnectedInstance = name;
+      if (connected) anyConnected = true;
+      html += `<span style="display:inline-flex;align-items:center;gap:4px;margin-left:8px;padding:2px 8px;border-radius:20px;background:${connected?'rgba(0,229,160,.1)':'rgba(255,45,85,.1)'};color:${connected?'var(--accent)':'var(--danger)'}">
+        <span style="width:6px;height:6px;border-radius:50%;background:${connected?'var(--accent)':'var(--danger)'};display:inline-block"></span>
+        ${name}
+      </span>`;
     }
     if (chipBar) chipBar.innerHTML = html;
     if (chipStatus) {
@@ -992,21 +1000,35 @@ async function checkAllChips() {
       chipStatus.style.background = anyConnected ? 'rgba(0,229,160,.1)' : 'rgba(255,45,85,.1)';
       chipStatus.style.color = anyConnected ? 'var(--accent)' : 'var(--danger)';
     }
-    // Carrega conversas
-    await loadWAConversations();
+    // FIX: usa a primeira instância conectada encontrada se config.evolutionInstance não estiver definido
+    const instanceToLoad = config.evolutionInstance || firstConnectedInstance;
+    if (instanceToLoad) await loadWAConversations(instanceToLoad);
   } catch(e) {
     if (chipStatus) { chipStatus.textContent = 'ERRO'; }
+    console.error('[checkAllChips]', e);
   }
 }
 
-async function loadWAConversations() {
+async function loadWAConversations(instanceName) {
   const list = document.getElementById('waDashConvList');
-  if (!config.evolutionUrl || !config.evolutionToken || !config.evolutionInstance) return;
+  if (!config.evolutionUrl || !config.evolutionToken) return;
+  // FIX: aceita instância como parâmetro, fallback para config salva
+  const instance = instanceName || config.evolutionInstance;
+  if (!instance) {
+    if (list) list.innerHTML = '<div class="empty-state" style="padding:16px"><div class="empty-sub">Instância não detectada. Preencha "Instância Padrão" nas Integrações.</div></div>';
+    return;
+  }
+  if (list) list.innerHTML = '<div class="empty-state" style="padding:16px"><div class="empty-sub">⏳ Carregando conversas de ' + instance + '...</div></div>';
   try {
-    const res = await fetch(config.evolutionUrl + '/chat/findChats/' + config.evolutionInstance, { headers: evoHeaders() });
-    if (!res.ok) return;
+    const res = await fetch(config.evolutionUrl + '/chat/findChats/' + instance, { headers: evoHeaders() });
+    if (!res.ok) {
+      if (list) list.innerHTML = '<div class="empty-state" style="padding:16px"><div class="empty-sub">Erro HTTP ' + res.status + ' ao buscar conversas.</div></div>';
+      return;
+    }
     const data = await res.json();
-    const chats = Array.isArray(data) ? data.slice(0, 8) : [];
+    // A Evolution pode retornar array direto ou wrapped
+    const rawChats = Array.isArray(data) ? data : (data.chats || data.data || []);
+    const chats = rawChats.slice(0, 8);
     if (!chats.length) {
       if (list) list.innerHTML = '<div class="empty-state" style="padding:16px"><div class="empty-sub">Nenhuma conversa recente.</div></div>';
       return;
@@ -1877,6 +1899,10 @@ window.onload = async () => {
   renderFlows();
   checkProxy();
   document.getElementById('serverUrl').value = config.serverUrl || '';
+  // FIX: inicializa o painel WhatsApp ao vivo automaticamente
+  if (config.evolutionUrl && config.evolutionToken) {
+    setTimeout(() => checkAllChips(), 500);
+  }
 
   // Invalida cache antigo sem pipelineName e re-busca sempre que tiver token
   const hasOldCache = rdStages.length && !rdStages[0].pipelineName;
