@@ -925,10 +925,31 @@ function evoHeaders() {
   return { 'Content-Type': 'application/json', 'apikey': config.evolutionToken };
 }
 
+// Wrapper para chamadas Evolution com fallback CORS
+async function evoFetch(path, options = {}) {
+  const url = config.evolutionUrl.replace(/\/$/, '') + path;
+  const headers = evoHeaders();
+  
+  // Tenta direto primeiro
+  try {
+    const res = await fetch(url, { ...options, headers: { ...headers, ...(options.headers||{}) } });
+    return res;
+  } catch(e) {
+    // Se falhar por CORS, tenta via proxy público (allorigins)
+    const proxied = 'https://api.allorigins.win/raw?url=' + encodeURIComponent(url);
+    const res = await fetch(proxied, {
+      method: options.method || 'GET',
+      headers: { 'Content-Type': 'application/json' },
+      body: options.body
+    });
+    return res;
+  }
+}
+
 async function _testEvolution(resultEl) {
   try {
     if (!config.evolutionUrl || !config.evolutionToken) throw new Error('URL e API Key obrigatórios');
-    const res = await fetch(config.evolutionUrl + '/instance/fetchInstances', { headers: evoHeaders() });
+    const res = await evoFetch('/instance/fetchInstances');
     if (res.ok) {
       const data = await res.json();
       setStatus('evolutionStatus', true, 'CONECTADO');
@@ -951,8 +972,8 @@ async function sendWhatsApp() {
   if (!config.evolutionUrl) { showToast('Configure a Evolution API','err'); return; }
   resultEl.textContent = '⏳ Enviando...'; resultEl.style.color = 'var(--warn)';
   try {
-    const res = await fetch(config.evolutionUrl + '/message/sendText/' + instance, {
-      method: 'POST', headers: evoHeaders(),
+    const res = await evoFetch('/message/sendText/' + instance, {
+      method: 'POST',
       body: JSON.stringify({ number: phone, text: message })
     });
     const data = await res.json();
@@ -981,9 +1002,9 @@ async function checkAllChips() {
     return;
   }
   try {
-    const res = await fetch(config.evolutionUrl + '/instance/fetchInstances', { headers: evoHeaders() });
+    const res = await evoFetch('/instance/fetchInstances');
     const data = await res.json();
-    const instances = Array.isArray(data) ? data : [];
+    const instances = Array.isArray(data) ? data : (data?.data || []);
     availableInstances = instances;
 
     if (!instances.length) {
@@ -994,10 +1015,15 @@ async function checkAllChips() {
     // Atualiza select de chips
     if (chipFilterEl) {
       chipFilterEl.innerHTML = instances.map(inst => {
-        const name = inst.instance?.instanceName || inst.instanceName || inst.name || '?';
-        return `<option value="${name}">${name}</option>`;
-      }).join('');
-      if (config.evolutionInstance) chipFilterEl.value = config.evolutionInstance;
+        const name = inst.instance?.instanceName || inst.instanceName || inst.name || inst.id || '';
+        if (!name) return '';
+        return '<option value="' + name + '">' + name + '</option>';
+      }).filter(Boolean).join('');
+      // Tenta setar pelo config, senão pega o primeiro disponível
+      const firstInst = instances[0]?.instance?.instanceName || instances[0]?.instanceName || instances[0]?.name || '';
+      const preferred = config.evolutionInstance || firstInst;
+      const optExists = chipFilterEl.querySelector('option[value="' + preferred + '"]');
+      chipFilterEl.value = optExists ? preferred : firstInst;
     }
 
     // Atualiza select de SDRs com base nos mapeamentos
@@ -1012,9 +1038,10 @@ async function checkAllChips() {
     let anyConnected = false;
     let statusHtml = '';
     for (const inst of instances) {
-      const name = inst.instance?.instanceName || inst.instanceName || inst.name || '?';
+      const name = inst.instance?.instanceName || inst.instanceName || inst.name || inst.id || '?';
+      if (name === '?') continue;
       try {
-        const sr = await fetch(config.evolutionUrl + '/instance/connectionState/' + name, { headers: evoHeaders() });
+        const sr = await evoFetch('/instance/connectionState/' + name);
         const sd = await sr.json();
         const state = sd.instance?.state || sd.state || 'unknown';
         const connected = state === 'open';
@@ -1068,9 +1095,10 @@ function renderSDRMappingList() {
       <select class="form-select" style="font-size:10px;padding:6px 9px" onchange="sdrMappings[${i}].instance=this.value">
         <option value="">Selecione chip...</option>
         ${availableInstances.map(inst => {
-          const name = inst.instance?.instanceName || inst.instanceName || inst.name || '?';
-          return `<option value="${name}" ${m.instance===name?'selected':''}>${name}</option>`;
-        }).join('')}
+          const n = inst.instance?.instanceName || inst.instanceName || inst.name || inst.id || '';
+          if (!n) return '';
+          return '<option value="' + n + '" ' + (m.instance===n?'selected':'') + '>' + n + '</option>';
+        }).filter(Boolean).join('')}
       </select>
       <button class="btn-danger" style="padding:5px 9px;font-size:11px" onclick="removeSDRMapping(${i})">✕</button>
     </div>`).join('');
@@ -1115,7 +1143,7 @@ async function loadWAConversations() {
   if (list) list.innerHTML = '<div style="padding:16px;text-align:center;font-family:var(--mono);font-size:10px;color:var(--muted)">⏳ Carregando conversas...</div>';
 
   try {
-    const res = await fetch(config.evolutionUrl + '/chat/findChats/' + instance, { headers: evoHeaders() });
+    const res = await evoFetch('/chat/findChats/' + instance);
     if (!res.ok) {
       if (list) list.innerHTML = `<div class="empty-state" style="padding:16px"><div class="empty-sub">Erro ${res.status} — verifique a instância "${instance}".</div></div>`;
       return;
@@ -1164,7 +1192,7 @@ async function checkWAStatus() {
   const instance = document.getElementById('waInstance').value.trim() || config.evolutionInstance;
   const resultEl = document.getElementById('waResult');
   try {
-    const res = await fetch(config.evolutionUrl + '/instance/connectionState/' + instance, { headers: evoHeaders() });
+    const res = await evoFetch('/instance/connectionState/' + instance);
     const data = await res.json();
     resultEl.style.color = data.state==='open' ? 'var(--accent)' : 'var(--warn)';
     resultEl.textContent = 'Status "' + instance + '": ' + (data.state || JSON.stringify(data));
