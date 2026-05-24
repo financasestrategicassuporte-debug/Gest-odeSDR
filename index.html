@@ -2328,7 +2328,265 @@ window.onload = async () => {
     renderRDStages();
     populateStageTriggerSelect();
   }
-};<!-- COLE O PATCH AQUI -->
+};<
+<!-- ================================================================
+     PATCH GFB — Supabase + Evolution Proxy Fix
+     Adicione este bloco ANTES do </body> no sdr-command.html
+================================================================ -->
+<script>
+// ================================================================
+// CONSTANTS
+// ================================================================
+const SB_URL = 'https://fdgjxqthjaxaevvgwfob.supabase.co';
+const SB_KEY = 'sb_publishable_hoaEV8xGZBQmaoH5T_Cxyg_SVlKAiVU';
+
+// ================================================================
+// FIX 1: evoProxy via Vercel proxy (resolve CORS definitivamente)
+// ================================================================
+async function evoProxy(path, method='GET', body=null) {
+  try {
+    const res = await fetch('/api/proxy', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        service: 'evolution',
+        evolutionUrl: config.evolutionUrl,
+        payload: { path, method, body },
+        token: config.evolutionToken
+      })
+    });
+    if (!res.ok) {
+      const e = await res.json().catch(() => ({}));
+      throw new Error(e.error || `HTTP ${res.status}`);
+    }
+    return res.json();
+  } catch (proxyErr) {
+    console.warn('[evoProxy] proxy falhou, tentando direto:', proxyErr.message);
+    const base = (config.evolutionUrl || '').replace(/\/+$/, '');
+    const opts = {
+      method: method || 'GET',
+      headers: { 'Content-Type': 'application/json', 'apikey': config.evolutionToken }
+    };
+    if (body) opts.body = JSON.stringify(body);
+    const r = await fetch(base + path, opts);
+    if (!r.ok) throw new Error(`HTTP ${r.status} (direto)`);
+    return r.json();
+  }
+}
+
+// ================================================================
+// FIX 2: Supabase — dados reais de ligações
+// ================================================================
+async function sbFetch(path) {
+  const res = await fetch(`${SB_URL}/rest/v1/${path}`, {
+    headers: { 'apikey': SB_KEY, 'Authorization': `Bearer ${SB_KEY}` }
+  });
+  return res.json();
+}
+
+function parseAIScore(analysis) {
+  const m = (analysis || '').match(/Nota[^:]*:\s*(\d+)/i);
+  return m ? parseInt(m[1]) : null;
+}
+
+async function loadLigacoesData() {
+  try {
+    const all = await sbFetch('ligacoes?select=*&order=created_at.desc&limit=300');
+    if (!Array.isArray(all)) return;
+
+    const today = new Date().toLocaleDateString('sv-SE');
+    const todayCalls = all.filter(c => (c.started_at || c.created_at || '').startsWith(today));
+
+    // Atualiza os 4 KPI cards
+    const svs = document.querySelectorAll('.stat-card .stat-value');
+    if (svs[0]) svs[0].textContent = todayCalls.length;
+
+    const scores = all.map(c => parseAIScore(c.ai_analysis)).filter(Boolean);
+    const avgScore = scores.length ? (scores.reduce((a,b)=>a+b,0)/scores.length).toFixed(1) : '—';
+    if (svs[1]) svs[1].textContent = avgScore;
+
+    const meetings = todayCalls.filter(c => c.result === 'Agendou').length;
+    if (svs[2]) svs[2].textContent = meetings;
+    if (svs[3]) svs[3].textContent = all.length; // Total histórico
+
+    updateSDRsFromDB(all, todayCalls);
+    updatePerfPanel(all);
+    renderCallsList(all.slice(0, 10));
+    renderAnalysisHistory(all.slice(0, 20));
+    setStatus('supabaseStatus', true, 'CONECTADO');
+  } catch(e) { console.error('[loadLigacoesData]', e); }
+}
+
+function updateSDRsFromDB(all, todayCalls) {
+  const bySDR = {};
+  all.forEach(c => {
+    const name = (c.sdr_name || 'SDR').trim();
+    if (!bySDR[name]) bySDR[name] = { all:[], today:[] };
+    bySDR[name].all.push(c);
+  });
+  todayCalls.forEach(c => {
+    const name = (c.sdr_name || 'SDR').trim();
+    if (bySDR[name]) bySDR[name].today.push(c);
+  });
+
+  const sections = document.querySelectorAll('.sidebar-section');
+  const sdrSection = sections[sections.length - 1];
+  if (!sdrSection || !Object.keys(bySDR).length) return;
+
+  const cards = Object.entries(bySDR).map(([name, data]) => {
+    const scores = data.all.map(c => parseAIScore(c.ai_analysis)).filter(Boolean);
+    const avg = scores.length ? Math.round(scores.reduce((a,b)=>a+b,0)/scores.length) : null;
+    const agendou = data.all.filter(c => c.result === 'Agendou').length;
+    const last = data.all[0];
+    const lastTime = last?.started_at ? new Date(last.started_at).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}) : '—';
+    const scoreClass = (avg||0) >= 7 ? 'score-high' : 'score-med';
+    return `<div class="sdr-card" onclick="selectSDR(this);filterCallsBySDR('${name}')">
+      <div class="sdr-header">
+        <div class="sdr-name">${name}</div>
+        <div class="sdr-score ${scoreClass}">${avg !== null ? avg+'/10' : '—'}</div>
+      </div>
+      <div class="sdr-stats">
+        <div class="sdr-stat">Hoje:<span>${data.today.length}</span></div>
+        <div class="sdr-stat">Total:<span>${data.all.length}</span></div>
+        <div class="sdr-stat">Ag:<span>${agendou}</span></div>
+      </div>
+      <div class="sdr-status">
+        <div class="status-indicator online"></div>
+        <div class="status-label">Última: ${lastTime}</div>
+      </div>
+    </div>`;
+  }).join('');
+  sdrSection.innerHTML = `<div class="sidebar-label">SDRs — Tempo Real</div>${cards}`;
+}
+
+function updatePerfPanel(all) {
+  const perfBody = document.querySelector('#tab-dashboard .grid-2 .panel:first-child .panel-body');
+  if (!perfBody) return;
+  const bySDR = {};
+  all.forEach(c => {
+    const name = (c.sdr_name || 'SDR').trim();
+    if (!bySDR[name]) bySDR[name] = [];
+    bySDR[name].push(c);
+  });
+  if (!Object.keys(bySDR).length) return;
+  const today = new Date().toLocaleDateString('sv-SE');
+  const html = Object.entries(bySDR).map(([name, calls]) => {
+    const todayC = calls.filter(c => (c.started_at||c.created_at||'').startsWith(today));
+    const scores = calls.map(c => parseAIScore(c.ai_analysis)).filter(Boolean);
+    const avg = scores.length ? Math.round(scores.reduce((a,b)=>a+b,0)/scores.length) : 0;
+    const pct = avg * 10;
+    const fill = pct >= 70 ? 'fill-green' : 'fill-orange';
+    const agendou = calls.filter(c => c.result === 'Agendou').length;
+    const atendeu = calls.filter(c => c.result === 'Atendeu').length;
+    const convRate = calls.length ? Math.round((agendou/calls.length)*100) : 0;
+    const last = calls[0];
+    const lastTime = last?.started_at ? new Date(last.started_at).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}) : '—';
+    return `<div class="analysis-card">
+      <div class="analysis-top">
+        <div class="analysis-name">${name}</div>
+        <div class="analysis-time">Última: ${lastTime} · ${todayC.length} hoje</div>
+      </div>
+      <div class="score-bar-wrap">
+        <div class="score-bar-label"><span>Score IA Médio</span><span>${avg||'—'}/10</span></div>
+        <div class="score-bar"><div class="score-fill ${fill}" style="width:${pct}%"></div></div>
+      </div>
+      <div class="score-bar-wrap">
+        <div class="score-bar-label"><span>Taxa de Agendamento</span><span>${convRate}%</span></div>
+        <div class="score-bar"><div class="score-fill fill-blue" style="width:${convRate}%"></div></div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+        <span class="badge-pill pill-green">✅ ${atendeu} atendeu</span>
+        <span class="badge-pill pill-green">📅 ${agendou} agendou</span>
+        <span class="badge-pill">${calls.length} total</span>
+      </div>
+    </div>`;
+  }).join('');
+  perfBody.innerHTML = html;
+}
+
+function renderCallsList(calls) {
+  let panel = document.getElementById('__calls-panel');
+  if (!panel) {
+    const grid = document.querySelector('#tab-dashboard .grid-2');
+    if (!grid) return;
+    panel = document.createElement('div');
+    panel.id = '__calls-panel';
+    panel.className = 'panel';
+    panel.innerHTML = `<div class="panel-header"><div class="panel-title">Últimas Ligações</div><div class="panel-badge">AO VIVO</div></div><div id="__calls-list" class="panel-body" style="padding:0 18px;max-height:300px;overflow-y:auto"></div>`;
+    grid.insertAdjacentElement('afterend', panel);
+  }
+  const listEl = document.getElementById('__calls-list');
+  if (!listEl || !calls.length) return;
+  const rc = { 'Agendou':'var(--accent)', 'Atendeu':'var(--ms)', 'Não atendeu':'var(--warn)', 'Desqualificado':'var(--danger)' };
+  listEl.innerHTML = calls.map(c => {
+    const score = parseAIScore(c.ai_analysis);
+    const time = c.started_at ? new Date(c.started_at).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : '—';
+    const dur = c.duration_seconds ? `${Math.floor(c.duration_seconds/60)}:${String(c.duration_seconds%60).padStart(2,'0')}` : '—';
+    const initials = (c.lead_name||'L').split(' ').map(w=>w[0]).join('').substring(0,2).toUpperCase();
+    const rColor = rc[c.result] || 'var(--muted)';
+    return `<div class="call-item">
+      <div class="call-avatar" style="background:linear-gradient(135deg,#0066ff,#00b4d8)">${initials}</div>
+      <div class="call-info">
+        <div class="call-top">
+          <div class="call-name">${c.lead_name||'Lead'} <span style="font-size:10px;font-weight:400;color:var(--muted)">· ${c.sdr_name||''}</span></div>
+          <div class="call-time">${time} · ⏱ ${dur}</div>
+        </div>
+        <div class="call-meta">${c.phone||''}</div>
+        <div class="call-tags">
+          <span class="tag" style="background:rgba(0,0,0,.3);color:${rColor};border:1px solid ${rColor}40">${c.result||'—'}</span>
+          ${score ? `<span class="tag tag-ok">IA: ${score}/10</span>` : ''}
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function renderAnalysisHistory(calls) {
+  const hist = document.getElementById('analysisHistory');
+  if (!hist || !calls.length) return;
+  hist.innerHTML = calls.map(c => {
+    const score = parseAIScore(c.ai_analysis);
+    const pct = score ? score * 10 : 0;
+    const color = pct >= 70 ? 'fill-green' : 'fill-orange';
+    const time = c.started_at ? new Date(c.started_at).toLocaleString('pt-BR') : '—';
+    const summary = (c.ai_analysis||'').split('\n').filter(l=>l.trim()).slice(0,2).join(' · ');
+    return `<div class="analysis-card">
+      <div class="analysis-top">
+        <div class="analysis-name">${c.lead_name||'Lead'} <span style="font-size:10px;color:var(--muted)">· ${c.sdr_name||''}</span></div>
+        <div class="analysis-time">${time}</div>
+      </div>
+      <div class="score-bar-wrap">
+        <div class="score-bar-label"><span>Score IA</span><span>${score ? score+'/10' : '—'}</span></div>
+        <div class="score-bar"><div class="score-fill ${color}" style="width:${pct}%"></div></div>
+      </div>
+      <div style="font-size:10px;color:var(--muted);margin-top:5px;line-height:1.5">${summary.substring(0,120)}</div>
+      <div style="margin-top:5px;font-family:var(--mono);font-size:9px;color:${c.result==='Agendou'?'var(--accent)':'var(--muted)'}">${c.result||'—'} · ⏱ ${c.duration_seconds ? Math.floor(c.duration_seconds/60)+'min':'—'}</div>
+    </div>`;
+  }).join('');
+}
+
+async function filterCallsBySDR(sdrName) {
+  try {
+    const calls = await sbFetch(`ligacoes?sdr_name=eq.${encodeURIComponent(sdrName)}&select=*&order=created_at.desc&limit=50`);
+    if (Array.isArray(calls)) {
+      renderCallsList(calls.slice(0,10));
+      renderAnalysisHistory(calls.slice(0,20));
+    }
+  } catch(e) {}
+}
+
+// ================================================================
+// INIT PATCH — injeta no window.onload original via hook
+// ================================================================
+const _originalOnLoad = window.onload;
+window.onload = async function() {
+  if (_originalOnLoad) await _originalOnLoad();
+  // Carrega dados reais após o init original
+  await loadLigacoesData();
+  setInterval(loadLigacoesData, 30000);
+};
+</script>
+
     <script>...</script>
 
 </body>
