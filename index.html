@@ -508,106 +508,123 @@
   </div>
 </div>
 
-<!-- Flow Editor -->
+<!-- VISUAL FLOW EDITOR -->
 <div class="flow-editor" id="flowEditor">
-  <div class="flow-editor-header">
-    <div class="flow-editor-title" id="flowEditorTitle">Novo Fluxo</div>
-    <button class="btn-secondary btn-sm" onclick="saveFlow()">💾 Salvar Fluxo</button>
-    <button class="btn-danger" onclick="closeFlowEditor()">✕ Fechar</button>
+  <div class="fe-header">
+    <button class="btn-secondary btn-sm" onclick="closeFlowEditor()">← Voltar</button>
+    <div class="fe-title"><input type="text" id="flowName" placeholder="Nome do fluxo..."></div>
+    <div style="display:flex;align-items:center;gap:6px;font-family:var(--mono);font-size:10px">
+      <span id="feInfoPipeline" style="color:var(--accent)"></span>
+      <span style="color:var(--muted)" id="feInfoStage"></span>
+    </div>
+    <button class="btn-primary btn-sm" onclick="saveFlow()">💾 Salvar</button>
+    <button class="btn-danger btn-sm" onclick="closeFlowEditor()">✕</button>
   </div>
-  <div class="flow-editor-body">
-    <div class="flow-steps-panel">
 
-      <!-- Cabeçalho do fluxo -->
-      <div style="margin-bottom:20px">
-        <div style="font-family:var(--mono);font-size:9px;letter-spacing:2px;color:var(--accent);margin-bottom:14px;text-transform:uppercase">◈ Configuração do Fluxo</div>
+  <div class="fe-body">
+    <!-- PALETTE -->
+    <div class="fe-palette">
+      <div style="font-family:var(--mono);font-size:9px;letter-spacing:2px;color:var(--accent);margin-bottom:12px;text-transform:uppercase">◈ Configuração</div>
 
-        <!-- 1. Funil -->
-        <div class="form-group">
-          <label class="form-label">
-            <span style="color:var(--accent);margin-right:6px">①</span>Funil de Vendas
-          </label>
-          <select class="form-select" id="flowPipeline" onchange="onPipelineChange()">
-            <option value="">Selecione o funil...</option>
-          </select>
-        </div>
-
-        <!-- 2. Nome do fluxo -->
-        <div class="form-group">
-          <label class="form-label">
-            <span style="color:var(--accent);margin-right:6px">②</span>Nome do Fluxo
-          </label>
-          <input type="text" class="form-input" id="flowName" placeholder="Ex: Follow-up Leads Frios">
-        </div>
-
-        <!-- 3. Etapa gatilho (filtrada pelo funil selecionado) -->
-        <div class="form-group">
-          <label class="form-label">
-            <span style="color:var(--accent);margin-right:6px">③</span>Etapa Gatilho
-          </label>
-          <select class="form-select" id="flowTriggerStage" disabled>
-            <option value="">← Selecione o funil primeiro</option>
-          </select>
-          <div id="stageHint" style="font-family:var(--mono);font-size:9px;color:var(--muted);margin-top:5px">
-            O fluxo dispara quando um lead entrar nesta etapa
+      <div class="form-group">
+        <label class="form-label">Funil</label>
+        <select class="form-select" id="feFlowPipeline" style="font-size:11px" onchange="feOnPipelineChange()">
+          <option value="">Selecione o funil...</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Etapa Gatilho</label>
+        <select class="form-select" id="feFlowStage" style="font-size:11px" disabled>
+          <option value="">← Selecione o funil</option>
+        </select>
+        <div style="font-family:var(--mono);font-size:9px;color:var(--muted);margin-top:4px">Dispara quando o lead entrar nesta etapa</div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Status</label>
+        <div class="fe-toggle">
+          <div class="fe-toggle-btn on" id="feBtnOn" onclick="feSetActive(true)">
+            <div class="tbi">✅</div><div class="tbl">ATIVO</div>
+          </div>
+          <div class="fe-toggle-btn" id="feBtnOff" onclick="feSetActive(false)">
+            <div class="tbi">⏸</div><div class="tbl">PAUSADO</div>
           </div>
         </div>
-
-        <!-- 4. Ativo -->
-        <div class="form-group">
-          <label class="form-label">
-            <span style="color:var(--accent);margin-right:6px">④</span>Status do Fluxo
-          </label>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-            <div id="activeBtn" onclick="setFlowActive(true)" style="padding:10px;border:1px solid var(--accent);border-radius:8px;text-align:center;cursor:pointer;background:rgba(0,229,160,.08)">
-              <div style="font-size:14px;margin-bottom:3px">✅</div>
-              <div style="font-family:var(--mono);font-size:9px;color:var(--accent)">ATIVO</div>
-            </div>
-            <div id="inactiveBtn" onclick="setFlowActive(false)" style="padding:10px;border:1px solid var(--border);border-radius:8px;text-align:center;cursor:pointer">
-              <div style="font-size:14px;margin-bottom:3px">⏸</div>
-              <div style="font-family:var(--mono);font-size:9px;color:var(--muted)">PAUSADO</div>
-            </div>
-          </div>
-          <input type="hidden" id="flowActive" value="true">
+        <input type="hidden" id="feFlowActive" value="true">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Horário Comercial</label>
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:8px;font-size:11px;color:var(--muted)">
+          <input type="checkbox" id="feBHEnabled" checked onchange="feToggleBH()"> Respeitar horário
+        </label>
+        <div id="feBHConfig" style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+          <div><label class="form-label" style="font-size:8px">INÍCIO</label>
+            <input type="time" class="form-input" id="feBHStart" value="09:00" style="font-size:10px;padding:6px 8px"></div>
+          <div><label class="form-label" style="font-size:8px">FIM</label>
+            <input type="time" class="form-input" id="feBHEnd" value="18:00" style="font-size:10px;padding:6px 8px"></div>
         </div>
       </div>
 
       <div class="divider"></div>
+      <div style="font-family:var(--mono);font-size:9px;letter-spacing:2px;color:var(--muted);margin-bottom:10px;text-transform:uppercase">◈ Nodes</div>
 
-      <!-- Adicionar passos -->
-      <div>
-        <div style="font-family:var(--mono);font-size:9px;letter-spacing:2px;color:var(--muted);margin-bottom:12px;text-transform:uppercase">◈ Adicionar Passo</div>
-        <div class="step-type-grid">
-          <div class="step-type-option" onclick="addStep('mensagem')">
-            <div class="step-icon">💬</div>
-            <div class="step-label">MENSAGEM</div>
-          </div>
-          <div class="step-type-option" onclick="addStep('esperar')">
-            <div class="step-icon">⏱</div>
-            <div class="step-label">ESPERAR</div>
-          </div>
-          <div class="step-type-option" onclick="addStep('condicao')">
-            <div class="step-icon">🔀</div>
-            <div class="step-label">CONDIÇÃO</div>
-          </div>
-          <div class="step-type-option" onclick="addStep('acao_rd')">
-            <div class="step-icon">📋</div>
-            <div class="step-label">AÇÃO CRM</div>
-          </div>
-        </div>
+      <div class="fe-pnode" draggable="true" ondragstart="fePalDrag(event,'start')">
+        <div class="fe-ndot" style="background:#00e5a0"></div>🚀 Início
+      </div>
+      <div class="fe-pnode" draggable="true" ondragstart="fePalDrag(event,'mensagem')">
+        <div class="fe-ndot" style="background:#0066ff"></div>💬 Mensagem WA
+      </div>
+      <div class="fe-pnode" draggable="true" ondragstart="fePalDrag(event,'esperar')">
+        <div class="fe-ndot" style="background:#ff6b35"></div>⏱ Aguardar
+      </div>
+      <div class="fe-pnode" draggable="true" ondragstart="fePalDrag(event,'condicao')">
+        <div class="fe-ndot" style="background:#7c3aed"></div>🔀 Condição
+      </div>
+      <div class="fe-pnode" draggable="true" ondragstart="fePalDrag(event,'acao_rd')">
+        <div class="fe-ndot" style="background:#ff2d55"></div>📋 Ação CRM
+      </div>
+      <div class="fe-pnode" draggable="true" ondragstart="fePalDrag(event,'fim')">
+        <div class="fe-ndot" style="background:#4a6070"></div>🏁 Fim
+      </div>
 
-        <div style="margin-top:14px;font-family:var(--mono);font-size:9px;color:var(--muted);line-height:1.9">
-          <strong style="color:var(--text)">Variáveis:</strong><br>
-          {{nome}} · {{empresa}}<br>
-          {{telefone}} · {{etapa}}<br>
-          {{sdr}} · {{resposta}}
-        </div>
+      <div class="divider"></div>
+      <div style="font-family:var(--mono);font-size:9px;color:var(--muted);line-height:1.9">
+        <strong style="color:var(--text)">Variáveis:</strong><br>
+        {{nome}} · {{empresa}}<br>{{telefone}} · {{etapa}}<br>{{sdr}} · {{resposta}}
       </div>
     </div>
-    <div class="flow-canvas">
-      <div style="font-size:11px;color:var(--muted);margin-bottom:18px;font-family:var(--mono)">◈ CANVAS DO FLUXO</div>
-      <div id="stepsCanvas"></div>
-      <button class="add-step-btn" onclick="addStep('mensagem')">+ Adicionar Passo</button>
+
+    <!-- CANVAS -->
+    <div class="fe-canvas-wrap" id="feCanvasWrap"
+         ondragover="event.preventDefault()"
+         ondrop="feCanvasDrop(event)"
+         onmousedown="feCanvasMD(event)"
+         onmousemove="feCanvasMM(event)"
+         onmouseup="feCanvasMU(event)"
+         onmouseleave="feCanvasMU(event)">
+      <svg class="fe-svg" id="feSvg">
+        <defs>
+          <marker id="mGreen" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+            <path d="M0,0 L0,6 L8,3 z" fill="#00e5a0"/>
+          </marker>
+          <marker id="mGray" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+            <path d="M0,0 L0,6 L8,3 z" fill="#1e2a35"/>
+          </marker>
+          <marker id="mRed" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+            <path d="M0,0 L0,6 L8,3 z" fill="#ff2d55"/>
+          </marker>
+        </defs>
+        <g id="feEdgesG"></g>
+        <path id="fePreview" style="display:none;fill:none;stroke:var(--accent);stroke-width:2;stroke-dasharray:6 3"/>
+      </svg>
+      <div class="fe-nodes-layer" id="feNodesLayer"></div>
+    </div>
+
+    <!-- PROPERTIES -->
+    <div class="fe-props" id="feProps">
+      <div style="text-align:center;padding:30px 10px;color:var(--muted)">
+        <div style="font-size:30px;margin-bottom:8px">◈</div>
+        <div style="font-size:11px">Clique em um node para editar</div>
+      </div>
     </div>
   </div>
 </div>
@@ -955,236 +972,545 @@ function addToAnalysisHistory(result, name) {
 }
 
 // ====================================================================
-// FLOWS
+// VISUAL FLOW EDITOR ENGINE
 // ====================================================================
+let feNodes = [];
+let feEdges = [];
+let feSelected = null;
+let feDragNode = null;   // { id, ox, oy } offset do mouse no node
+let feConnecting = null; // { nodeId, port }
+let fePalType = null;    // tipo sendo arrastado da palette
+let feFlowId = null;
+let feFlowCfg = {
+  pipelineId:'', pipelineName:'', stageId:'', stageName:'',
+  active: true,
+  bh: { enabled:true, start:'09:00', end:'18:00' }
+};
+
+const FE_COLOR = { start:'#00e5a0', mensagem:'#0066ff', esperar:'#ff6b35', condicao:'#7c3aed', acao_rd:'#ff2d55', fim:'#4a6070' };
+const FE_LABEL = { start:'INÍCIO', mensagem:'MENSAGEM WA', esperar:'AGUARDAR', condicao:'CONDIÇÃO', acao_rd:'AÇÃO CRM', fim:'FIM' };
+const FE_ICON  = { start:'🚀', mensagem:'💬', esperar:'⏱', condicao:'🔀', acao_rd:'📋', fim:'🏁' };
+
+function feDefaultData(type) {
+  return { start:{}, mensagem:{ message:'', respectBH:true }, esperar:{ amount:1, unit:'dias' },
+           condicao:{ keyword:'' }, acao_rd:{ action:'mover_etapa', stageId:'' }, fim:{} }[type] || {};
+}
+
+// ── RENDER ─────────────────────────────────────────────────────────
+function feRender() { feRenderNodes(); feRenderEdges(); }
+
+function feNodeHTML(n) {
+  const c = FE_COLOR[n.type], sel = feSelected === n.id;
+  let body = '';
+  if (n.type === 'start') {
+    const s = rdStages.find(st => st.id === feFlowCfg.stageId);
+    body = s ? `<span style="color:var(--text)">Gatilho: ${s.name}</span>` : '<span style="color:var(--muted)">Configure o funil e etapa</span>';
+  } else if (n.type === 'mensagem') {
+    const bh = n.data.respectBH !== false;
+    const preview = n.data.message ? `"${n.data.message.substring(0,45)}${n.data.message.length>45?'…':''}"` : '<em style="color:var(--muted)">Clique para editar...</em>';
+    body = `${preview}<div class="bh-badge ${bh?'bh-on':'bh-off'}">${bh?'⏰ Horário comercial':'🌙 Qualquer hora'}</div>`;
+  } else if (n.type === 'esperar') {
+    body = `⏱ ${n.data.amount||1} ${n.data.unit||'dias'}`;
+  } else if (n.type === 'condicao') {
+    body = n.data.keyword ? `Resposta contém: <strong style="color:var(--text)">"${n.data.keyword}"</strong>` : '<em style="color:var(--muted)">Defina a palavra-chave</em>';
+  } else if (n.type === 'acao_rd') {
+    const acts = { mover_etapa:'Mover card de etapa', atualizar_descricao:'Atualizar descrição', ambos:'Mover + atualizar' };
+    const s = rdStages.find(st => st.id === n.data.stageId);
+    body = `${acts[n.data.action]||'Mover card'}${s?`<br><strong style="color:var(--text)">→ ${s.name}</strong>`:''}`;
+  } else if (n.type === 'fim') {
+    body = 'Fim da cadência';
+  }
+
+  const hasIn = n.type !== 'start';
+  const isCond = n.type === 'condicao';
+  const hasOut = n.type !== 'fim' && !isCond;
+
+  return `<div class="fe-node${sel?' fe-selected':''}" id="${n.id}" style="left:${n.x}px;top:${n.y}px"
+    onmousedown="feNodeMD(event,'${n.id}')">
+    <div class="fe-nh" style="background:rgba(${feHexRgb(c)},.14)">
+      <span style="font-size:14px">${FE_ICON[n.type]}</span>
+      <span class="fe-nt" style="color:${c}">${FE_LABEL[n.type]}</span>
+      <button class="fe-ndel" onclick="event.stopPropagation();feDeleteNode('${n.id}')">✕</button>
+    </div>
+    <div class="fe-nb">${body}</div>
+    ${hasIn?`<div class="fe-port fe-pi" onmousedown="event.stopPropagation()" onmouseup="event.stopPropagation();fePortUp(event,'${n.id}','in')"></div>`:''}
+    ${hasOut?`<div class="fe-port fe-po" style="background:${c};border-color:${c}" onmousedown="event.stopPropagation();fePortDown(event,'${n.id}','out')"></div>`:''}
+    ${isCond?`
+      <div class="fe-port fe-po-y" style="background:#00e5a0;border-color:#00e5a0" onmousedown="event.stopPropagation();fePortDown(event,'${n.id}','yes')"></div>
+      <div class="fe-port fe-po-n" style="background:#ff2d55;border-color:#ff2d55" onmousedown="event.stopPropagation();fePortDown(event,'${n.id}','no')"></div>
+      <div class="fe-plbl fe-plbl-y">SIM</div>
+      <div class="fe-plbl fe-plbl-n">NÃO</div>`:''}
+  </div>`;
+}
+
+function feRenderNodes() {
+  const layer = document.getElementById('feNodesLayer');
+  if (!layer) return;
+  layer.innerHTML = feNodes.map(n => feNodeHTML(n)).join('');
+}
+
+function fePortCenter(nodeId, port) {
+  const el = document.getElementById(nodeId);
+  const wrap = document.getElementById('feCanvasWrap');
+  if (!el || !wrap) return { x:0, y:0 };
+  const nr = el.getBoundingClientRect();
+  const wr = wrap.getBoundingClientRect();
+  const nx = nr.left - wr.left, ny = nr.top - wr.top;
+  const w = nr.width, h = nr.height;
+  if (port === 'in')  return { x: nx, y: ny + h/2 };
+  if (port === 'out') return { x: nx + w, y: ny + h/2 };
+  if (port === 'yes') return { x: nx + w, y: ny + h*0.32 };
+  if (port === 'no')  return { x: nx + w, y: ny + h*0.68 };
+  return { x:0, y:0 };
+}
+
+function feEdgePath(x1,y1,x2,y2) {
+  const dx = Math.abs(x2-x1)*0.55 + 30;
+  return `M${x1},${y1} C${x1+dx},${y1} ${x2-dx},${y2} ${x2},${y2}`;
+}
+
+function feRenderEdges() {
+  const g = document.getElementById('feEdgesG');
+  if (!g) return;
+  g.innerHTML = feEdges.map(e => {
+    const fromPt = fePortCenter(e.from, e.fromPort);
+    const toPt   = fePortCenter(e.to,   'in');
+    const marker = e.fromPort === 'yes' ? '#mGreen' : e.fromPort === 'no' ? '#mRed' : '#mGray';
+    const stroke = e.fromPort === 'yes' ? '#00e5a0' : e.fromPort === 'no' ? '#ff2d55' : '#1e2a35';
+    return `<path d="${feEdgePath(fromPt.x,fromPt.y,toPt.x,toPt.y)}"
+      fill="none" stroke="${stroke}" stroke-width="2" marker-end="url(${marker})"
+      style="cursor:pointer" onclick="feDeleteEdge('${e.id}')" title="Clique para remover"/>`;
+  }).join('');
+}
+
+function feHexRgb(hex) {
+  const h = hex.replace('#','');
+  return [parseInt(h.slice(0,2),16),parseInt(h.slice(2,4),16),parseInt(h.slice(4,6),16)].join(',');
+}
+
+// ── CREATE NODE ─────────────────────────────────────────────────────
+function feCreateNode(type, x, y) {
+  const id = 'n' + Date.now();
+  feNodes.push({ id, type, x, y, data: feDefaultData(type) });
+  feRender();
+  feSelectNode(id);
+  return id;
+}
+
+function feDeleteNode(id) {
+  feNodes = feNodes.filter(n => n.id !== id);
+  feEdges = feEdges.filter(e => e.from !== id && e.to !== id);
+  if (feSelected === id) { feSelected = null; feShowProps(null); }
+  feRender();
+}
+
+function feDeleteEdge(id) {
+  feEdges = feEdges.filter(e => e.id !== id);
+  feRenderEdges();
+}
+
+// ── SELECT + PROPS ─────────────────────────────────────────────────
+function feSelectNode(id) {
+  feSelected = id;
+  feRenderNodes();
+  feRenderEdges();
+  feShowProps(id);
+}
+
+function feShowProps(id) {
+  const panel = document.getElementById('feProps');
+  if (!panel) return;
+  if (!id) {
+    panel.innerHTML = '<div style="text-align:center;padding:30px 10px;color:var(--muted)"><div style="font-size:30px;margin-bottom:8px">◈</div><div style="font-size:11px">Clique em um node para editar</div></div>';
+    return;
+  }
+  const node = feNodes.find(n => n.id === id);
+  if (!node) return;
+  const c = FE_COLOR[node.type];
+
+  let props = `<div class="fe-props-title" style="color:${c}">${FE_ICON[node.type]} ${FE_LABEL[node.type]}</div>`;
+
+  if (node.type === 'mensagem') {
+    props += `
+      <div class="form-group">
+        <label class="form-label">Mensagem WhatsApp</label>
+        <textarea class="form-textarea" style="min-height:100px" oninput="feUpd('${id}','message',this.value)"
+          placeholder="Olá {{nome}}, tudo bem? Vi que você se inscreveu...">${node.data.message||''}</textarea>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Horário Comercial</label>
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:11px;color:var(--muted)">
+          <input type="checkbox" ${node.data.respectBH!==false?'checked':''} onchange="feUpd('${id}','respectBH',this.checked);feRender()">
+          Respeitar horário configurado
+        </label>
+        <div style="font-family:var(--mono);font-size:9px;color:var(--muted);margin-top:4px">
+          Se marcado, mensagens fora do horário serão enfileiradas
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Atraso antes de enviar (segundos)</label>
+        <input type="number" class="form-input" value="${node.data.delay||0}" min="0"
+          oninput="feUpd('${id}','delay',+this.value)">
+      </div>`;
+  } else if (node.type === 'esperar') {
+    props += `
+      <div class="form-group">
+        <label class="form-label">Aguardar por</label>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <input type="number" class="form-input" value="${node.data.amount||1}" min="1"
+            oninput="feUpd('${id}','amount',+this.value);feRender()">
+          <select class="form-select" onchange="feUpd('${id}','unit',this.value);feRender()">
+            <option value="minutos" ${node.data.unit==='minutos'?'selected':''}>Minutos</option>
+            <option value="horas" ${node.data.unit==='horas'?'selected':''}>Horas</option>
+            <option value="dias" ${!node.data.unit||node.data.unit==='dias'?'selected':''}>Dias</option>
+          </select>
+        </div>
+        <div style="font-family:var(--mono);font-size:9px;color:var(--muted);margin-top:4px">
+          ⏰ Conta dentro do horário comercial quando ativado
+        </div>
+      </div>`;
+  } else if (node.type === 'condicao') {
+    props += `
+      <div class="form-group">
+        <label class="form-label">Se a resposta do lead contiver</label>
+        <input type="text" class="form-input" value="${node.data.keyword||''}"
+          placeholder="Ex: sim, quero, interessado"
+          oninput="feUpd('${id}','keyword',this.value);feRender()">
+        <div style="font-family:var(--mono);font-size:9px;color:var(--muted);margin-top:4px">
+          Porta <span style="color:#00e5a0">SIM</span> → contém · Porta <span style="color:#ff2d55">NÃO</span> → não contém
+        </div>
+      </div>`;
+  } else if (node.type === 'acao_rd') {
+    const stageOpts = rdStages.map(s =>
+      `<option value="${s.id}" ${node.data.stageId===s.id?'selected':''}>${s.pipelineName?s.pipelineName+' → ':''} ${s.name}</option>`
+    ).join('');
+    props += `
+      <div class="form-group">
+        <label class="form-label">Ação no RD Station</label>
+        <select class="form-select" onchange="feUpd('${id}','action',this.value);feRender()">
+          <option value="mover_etapa" ${node.data.action==='mover_etapa'?'selected':''}>Mover card de etapa</option>
+          <option value="atualizar_descricao" ${node.data.action==='atualizar_descricao'?'selected':''}>Atualizar descrição</option>
+          <option value="ambos" ${node.data.action==='ambos'?'selected':''}>Mover + atualizar</option>
+        </select>
+      </div>
+      ${node.data.action!=='atualizar_descricao'?`
+      <div class="form-group">
+        <label class="form-label">Etapa de destino</label>
+        <select class="form-select" onchange="feUpd('${id}','stageId',this.value);feRender()">
+          <option value="">Selecione...</option>${stageOpts}
+        </select>
+      </div>`:''}
+      ${node.data.action!=='mover_etapa'?`
+      <div class="form-group">
+        <label class="form-label">Template da descrição</label>
+        <textarea class="form-textarea" style="min-height:70px"
+          oninput="feUpd('${id}','descTemplate',this.value)"
+          placeholder="Resposta em {{data}}: {{resposta}}">${node.data.descTemplate||''}</textarea>
+      </div>`:''}`;
+  } else if (node.type === 'start') {
+    props += `<div style="font-size:11px;color:var(--muted);line-height:1.7">
+      Este node dispara o fluxo quando um lead entrar na etapa gatilho configurada no painel esquerdo.</div>`;
+  } else if (node.type === 'fim') {
+    props += `<div style="font-size:11px;color:var(--muted)">Fim da sequência. O lead sai da cadência.</div>`;
+  }
+
+  panel.innerHTML = props;
+}
+
+function feUpd(id, key, val) {
+  const node = feNodes.find(n => n.id === id);
+  if (node) node.data[key] = val;
+}
+
+// ── DRAG NODES ──────────────────────────────────────────────────────
+function feNodeMD(e, id) {
+  if (e.button !== 0) return;
+  feSelectNode(id);
+  const el = document.getElementById(id);
+  const wrap = document.getElementById('feCanvasWrap');
+  if (!el || !wrap) return;
+  const nr = el.getBoundingClientRect();
+  const wr = wrap.getBoundingClientRect();
+  feDragNode = { id, ox: e.clientX - (nr.left - wr.left), oy: e.clientY - (nr.top - wr.top) };
+  e.preventDefault();
+}
+
+function feCanvasMD(e) {
+  if (e.target === document.getElementById('feCanvasWrap') || e.target === document.getElementById('feNodesLayer')) {
+    feSelected = null;
+    feRenderNodes();
+    feShowProps(null);
+  }
+}
+
+function feCanvasMM(e) {
+  const wrap = document.getElementById('feCanvasWrap');
+  if (!wrap) return;
+  const wr = wrap.getBoundingClientRect();
+  const mx = e.clientX - wr.left;
+  const my = e.clientY - wr.top;
+
+  if (feDragNode) {
+    const node = feNodes.find(n => n.id === feDragNode.id);
+    if (node) {
+      node.x = mx - feDragNode.ox;
+      node.y = my - feDragNode.oy;
+      const el = document.getElementById(node.id);
+      if (el) { el.style.left = node.x + 'px'; el.style.top = node.y + 'px'; }
+      feRenderEdges();
+    }
+  }
+
+  if (feConnecting) {
+    const prev = fePortCenter(feConnecting.nodeId, feConnecting.port);
+    const preview = document.getElementById('fePreview');
+    if (preview) {
+      preview.setAttribute('d', feEdgePath(prev.x, prev.y, mx, my));
+      preview.style.display = 'block';
+    }
+  }
+}
+
+function feCanvasMU(e) {
+  feDragNode = null;
+  if (feConnecting) {
+    feConnecting = null;
+    const preview = document.getElementById('fePreview');
+    if (preview) preview.style.display = 'none';
+  }
+}
+
+// ── PORT CONNECTIONS ─────────────────────────────────────────────────
+function fePortDown(e, nodeId, port) {
+  e.preventDefault();
+  feConnecting = { nodeId, port };
+}
+
+function fePortUp(e, nodeId, port) {
+  e.preventDefault();
+  if (!feConnecting || feConnecting.nodeId === nodeId) {
+    feConnecting = null;
+    const preview = document.getElementById('fePreview');
+    if (preview) preview.style.display = 'none';
+    return;
+  }
+  // Cria edge
+  feEdges.push({
+    id: 'e' + Date.now(),
+    from: feConnecting.nodeId,
+    fromPort: feConnecting.port,
+    to: nodeId
+  });
+  feConnecting = null;
+  const preview = document.getElementById('fePreview');
+  if (preview) preview.style.display = 'none';
+  feRenderEdges();
+}
+
+// ── PALETTE DRAG ─────────────────────────────────────────────────────
+function fePalDrag(e, type) {
+  fePalType = type;
+  e.dataTransfer.setData('text/plain', type);
+}
+
+function feCanvasDrop(e) {
+  e.preventDefault();
+  const type = fePalType || e.dataTransfer.getData('text/plain');
+  if (!type) return;
+  const wrap = document.getElementById('feCanvasWrap');
+  const wr = wrap.getBoundingClientRect();
+  const x = e.clientX - wr.left - 95;
+  const y = e.clientY - wr.top - 30;
+  feCreateNode(type, Math.max(10, x), Math.max(10, y));
+  fePalType = null;
+}
+
+// ── PIPELINE / STAGE selects ─────────────────────────────────────────
+function feOnPipelineChange() {
+  const pid = document.getElementById('feFlowPipeline').value;
+  const p = GFB_PIPELINES.find(p => p.id === pid);
+  feFlowCfg.pipelineId = pid;
+  feFlowCfg.pipelineName = p?.name || '';
+  document.getElementById('feInfoPipeline').textContent = p?.name || '';
+
+  const stageSel = document.getElementById('feFlowStage');
+  stageSel.innerHTML = '<option value="">Selecione a etapa gatilho...</option>';
+  if (pid) {
+    stageSel.disabled = false;
+    rdStages.filter(s => s.pipelineId === pid).forEach(s => {
+      const o = document.createElement('option');
+      o.value = s.id; o.textContent = s.name; stageSel.appendChild(o);
+    });
+    stageSel.onchange = () => {
+      feFlowCfg.stageId = stageSel.value;
+      const st = rdStages.find(s => s.id === stageSel.value);
+      feFlowCfg.stageName = st?.name || '';
+      document.getElementById('feInfoStage').textContent = st ? '→ ' + st.name : '';
+      feRenderNodes(); // atualiza node start
+    };
+  } else {
+    stageSel.disabled = true;
+  }
+}
+
+function feSetActive(val) {
+  document.getElementById('feFlowActive').value = val ? 'true' : 'false';
+  feFlowCfg.active = val;
+  document.getElementById('feBtnOn').className = 'fe-toggle-btn' + (val ? ' on' : '');
+  document.getElementById('feBtnOff').className = 'fe-toggle-btn' + (!val ? ' pause' : '');
+}
+
+function feToggleBH() {
+  const enabled = document.getElementById('feBHEnabled').checked;
+  feFlowCfg.bh.enabled = enabled;
+  document.getElementById('feBHConfig').style.opacity = enabled ? '1' : '.4';
+}
+
+// ── OPEN / CLOSE / SAVE ──────────────────────────────────────────────
+function openFlowEditor(flowId) {
+  // Reset state
+  feNodes = []; feEdges = []; feSelected = null;
+  feDragNode = null; feConnecting = null;
+  feFlowId = flowId;
+
+  // Preenche palette pipeline select
+  const psel = document.getElementById('feFlowPipeline');
+  psel.innerHTML = '<option value="">Selecione o funil...</option>';
+  GFB_PIPELINES.forEach(p => {
+    const o = document.createElement('option'); o.value = p.id; o.textContent = p.name; psel.appendChild(o);
+  });
+
+  const flow = flowId ? flows.find(f => f.id === flowId) : null;
+
+  document.getElementById('flowName').value = flow?.name || '';
+  document.getElementById('feInfoPipeline').textContent = '';
+  document.getElementById('feInfoStage').textContent = '';
+
+  if (flow) {
+    // Carrega config
+    feFlowCfg = {
+      pipelineId: flow.pipelineId || '',
+      pipelineName: flow.pipelineName || '',
+      stageId: flow.triggerStage || '',
+      stageName: flow.stageName || '',
+      active: flow.active !== false,
+      bh: flow.bh || { enabled:true, start:'09:00', end:'18:00' }
+    };
+
+    // Seta pipeline select
+    psel.value = feFlowCfg.pipelineId;
+    feOnPipelineChange();
+    setTimeout(() => {
+      const stageSel = document.getElementById('feFlowStage');
+      if (stageSel) stageSel.value = feFlowCfg.stageId;
+      document.getElementById('feInfoPipeline').textContent = feFlowCfg.pipelineName;
+      document.getElementById('feInfoStage').textContent = feFlowCfg.stageName ? '→ ' + feFlowCfg.stageName : '';
+    }, 50);
+
+    // Carrega nodes e edges
+    feNodes = JSON.parse(JSON.stringify(flow.nodes || []));
+    feEdges = JSON.parse(JSON.stringify(flow.edges || []));
+
+    // BH
+    document.getElementById('feBHEnabled').checked = feFlowCfg.bh.enabled;
+    document.getElementById('feBHStart').value = feFlowCfg.bh.start || '09:00';
+    document.getElementById('feBHEnd').value = feFlowCfg.bh.end || '18:00';
+    document.getElementById('feBHConfig').style.opacity = feFlowCfg.bh.enabled ? '1' : '.4';
+  } else {
+    feFlowCfg = { pipelineId:'', pipelineName:'', stageId:'', stageName:'', active:true, bh:{ enabled:true, start:'09:00', end:'18:00' } };
+    // Cria node start inicial
+    setTimeout(() => feCreateNode('start', 60, 120), 100);
+  }
+
+  feSetActive(feFlowCfg.active);
+  document.getElementById('flowEditor').classList.add('active');
+
+  setTimeout(() => { feRender(); feShowProps(null); }, 80);
+}
+
+function closeFlowEditor() {
+  document.getElementById('flowEditor').classList.remove('active');
+  feNodes = []; feEdges = []; feSelected = null;
+}
+
+function saveFlow() {
+  const name = document.getElementById('flowName').value.trim();
+  if (!name) { showToast('Dê um nome ao fluxo', 'err'); return; }
+  if (!feFlowCfg.pipelineId) { showToast('Selecione o funil', 'err'); return; }
+  if (!feFlowCfg.stageId) { showToast('Selecione a etapa gatilho', 'err'); return; }
+
+  feFlowCfg.bh.start = document.getElementById('feBHStart').value;
+  feFlowCfg.bh.end = document.getElementById('feBHEnd').value;
+
+  const flow = {
+    id: feFlowId || 'flow_' + Date.now(),
+    name,
+    pipelineId: feFlowCfg.pipelineId,
+    pipelineName: feFlowCfg.pipelineName,
+    triggerStage: feFlowCfg.stageId,
+    stageName: feFlowCfg.stageName,
+    active: feFlowCfg.active,
+    bh: { ...feFlowCfg.bh },
+    nodes: JSON.parse(JSON.stringify(feNodes)),
+    edges: JSON.parse(JSON.stringify(feEdges)),
+    updatedAt: new Date().toISOString()
+  };
+
+  if (feFlowId) {
+    const idx = flows.findIndex(f => f.id === feFlowId);
+    if (idx >= 0) flows[idx] = flow; else flows.push(flow);
+  } else {
+    flows.push(flow);
+  }
+
+  LS.set('flows', JSON.stringify(flows));
+  renderFlows();
+  renderRDStages();
+  closeFlowEditor();
+  showToast('Fluxo "' + name + '" salvo!', 'ok');
+}
+
+// ── FLOWS LIST RENDER ────────────────────────────────────────────────
 function renderFlows() {
   const list = document.getElementById('flowList');
   const badge = document.getElementById('flowCount');
   badge.textContent = flows.length + ' FLUXO' + (flows.length!==1?'S':'');
-  if (!flows.length) { list.innerHTML='<div class="empty-state"><div class="empty-icon">⬡</div><div class="empty-title">Nenhum fluxo criado</div></div>'; return; }
+  if (!flows.length) {
+    list.innerHTML='<div class="empty-state"><div class="empty-icon">⬡</div><div class="empty-title">Nenhum fluxo criado</div><div class="empty-sub">Clique em "+ Novo Fluxo" para criar.</div></div>';
+    return;
+  }
   list.innerHTML = flows.map(f => {
-    const stage = rdStages.find(s => s.id===f.triggerStage);
-    const dots = (f.steps||[]).map(s => {
-      const m={mensagem:'msg',esperar:'wait',condicao:'condition',acao_rd:'action'};
-      return `<div class="flow-step-dot ${m[s.type]||''}"></div><div class="step-arrow">›</div>`;
-    }).join('');
-    return `<div class="flow-item ${editingFlowId===f.id?'active-flow':''}" onclick="openFlowEditor('${f.id}')">
-      <div class="flow-item-header"><div class="flow-name">${f.name||'Sem nome'}</div>
+    const stage = rdStages.find(s => s.id === f.triggerStage);
+    const nodeCount = f.nodes?.length || 0;
+    const bh = f.bh?.enabled !== false;
+    return `<div class="flow-item ${feFlowId===f.id?'active-flow':''}" onclick="openFlowEditor('${f.id}')">
+      <div class="flow-item-header">
+        <div>
+          <div class="flow-name">${f.name}</div>
+          <div style="font-family:var(--mono);font-size:9px;color:var(--muted);margin-top:2px">${f.pipelineName||''}</div>
+        </div>
         <div style="display:flex;gap:5px;align-items:center">
-          <span class="badge-pill ${f.active?'pill-green':'pill-orange'}">${f.active?'● ATIVO':'○ INATIVO'}</span>
+          <span class="badge-pill ${f.active?'pill-green':'pill-orange'}">${f.active?'● ATIVO':'○ PAUSADO'}</span>
           <button class="btn-danger" style="font-size:9px;padding:3px 7px" onclick="event.stopPropagation();deleteFlow('${f.id}')">✕</button>
         </div>
       </div>
       <div class="flow-trigger"><span>⬡ Gatilho:</span><span>${stage?stage.name:f.triggerStage||'Não definido'}</span></div>
-      <div class="flow-steps-preview">${dots}<span style="font-size:9px;color:var(--muted);font-family:var(--mono);margin-left:3px">${f.steps?.length||0} passos</span></div>
+      <div style="display:flex;gap:6px;margin-top:7px;flex-wrap:wrap">
+        <span class="badge-pill" style="background:rgba(0,102,255,.1);color:#4d9fff">${nodeCount} nodes</span>
+        <span class="badge-pill ${bh?'pill-green':''}" style="${!bh?'background:rgba(74,96,112,.1);color:var(--muted)':''}">${bh?'⏰ Horário comercial':'🌙 Sem restrição'}</span>
+      </div>
     </div>`;
   }).join('');
 }
 
-function renderRDStages() {
-  const list = document.getElementById('rdStagesList');
-  if (!rdStages.length) {
-    list.innerHTML = '<div class="empty-state" style="padding:14px"><div class="empty-sub">Conecte o RD Station para ver as etapas.</div></div>';
-    return;
-  }
-  const colors = ['#00e5a0','#0066ff','#ff6b35','#ff2d55','#7c3aed','#4d9fff'];
-  // Agrupa por pipeline
-  const byPipeline = {};
-  rdStages.forEach(s => {
-    const key = s.pipelineName || 'Funil';
-    if (!byPipeline[key]) byPipeline[key] = [];
-    byPipeline[key].push(s);
-  });
-  let html = '';
-  Object.entries(byPipeline).forEach(([pname, stages]) => {
-    html += '<div style="margin-bottom:14px">';
-    html += '<div style="font-family:var(--mono);font-size:9px;letter-spacing:1px;color:var(--accent);margin-bottom:8px;text-transform:uppercase">' + pname + '</div>';
-    html += '<div class="stages-list">';
-    stages.forEach((s, i) => {
-      const linked = flows.filter(f => f.triggerStage === s.id);
-      html += '<div class="stage-item">';
-      html += '<div class="stage-dot" style="background:' + colors[i % colors.length] + '"></div>';
-      html += '<div class="stage-name">' + s.name + '</div>';
-      html += '<div class="stage-flow-link">' + (linked.length ? linked.map(f=>f.name).join(', ') : 'sem fluxo') + '</div>';
-      html += '</div>';
-    });
-    html += '</div></div>';
-  });
-  list.innerHTML = html;
-}
-
-function populateStageTriggerSelect() {
-  const sel = document.getElementById('flowTriggerStage');
-  if (!sel) return;
-  const cur = sel.value;
-  sel.innerHTML = '<option value="">Selecione o funil e etapa...</option>';
-
-  // Agrupa por pipeline
-  const byPipeline = {};
-  rdStages.forEach(s => {
-    const key = s.pipelineName || 'Funil';
-    if (!byPipeline[key]) byPipeline[key] = [];
-    byPipeline[key].push(s);
-  });
-
-  Object.entries(byPipeline).forEach(([pname, stages]) => {
-    const group = document.createElement('optgroup');
-    group.label = pname;
-    stages.forEach(s => {
-      const o = document.createElement('option');
-      o.value = s.id;
-      o.textContent = s.name;
-      group.appendChild(o);
-    });
-    sel.appendChild(group);
-  });
-
-  if (cur) sel.value = cur;
-}
-
-// Controle do botão ativo/pausado
-function setFlowActive(active) {
-  document.getElementById('flowActive').value = active ? 'true' : 'false';
-  const activeBtn = document.getElementById('activeBtn');
-  const inactiveBtn = document.getElementById('inactiveBtn');
-  if (active) {
-    activeBtn.style.border = '1px solid var(--accent)';
-    activeBtn.style.background = 'rgba(0,229,160,.08)';
-    activeBtn.querySelector('div:last-child').style.color = 'var(--accent)';
-    inactiveBtn.style.border = '1px solid var(--border)';
-    inactiveBtn.style.background = 'transparent';
-    inactiveBtn.querySelector('div:last-child').style.color = 'var(--muted)';
-  } else {
-    inactiveBtn.style.border = '1px solid var(--warn)';
-    inactiveBtn.style.background = 'rgba(255,107,53,.08)';
-    inactiveBtn.querySelector('div:last-child').style.color = 'var(--warn)';
-    activeBtn.style.border = '1px solid var(--border)';
-    activeBtn.style.background = 'transparent';
-    activeBtn.querySelector('div:last-child').style.color = 'var(--muted)';
-  }
-}
-
-// Ao selecionar funil — filtra etapas
-function onPipelineChange() {
-  const pipelineId = document.getElementById('flowPipeline').value;
-  const stageSel = document.getElementById('flowTriggerStage');
-  stageSel.innerHTML = '';
-
-  if (!pipelineId) {
-    stageSel.disabled = true;
-    stageSel.innerHTML = '<option value="">← Selecione o funil primeiro</option>';
-    return;
-  }
-
-  const filtered = rdStages.filter(s => s.pipelineId === pipelineId);
-  stageSel.disabled = false;
-  stageSel.innerHTML = '<option value="">Selecione a etapa gatilho...</option>';
-  filtered.forEach(s => {
-    const o = document.createElement('option');
-    o.value = s.id;
-    o.textContent = s.name;
-    stageSel.appendChild(o);
-  });
-}
-
-// Preenche o select de pipelines
-function populatePipelineSelect(selectedId) {
-  const sel = document.getElementById('flowPipeline');
-  if (!sel) return;
-  sel.innerHTML = '<option value="">Selecione o funil...</option>';
-  GFB_PIPELINES.forEach(p => {
-    const o = document.createElement('option');
-    o.value = p.id;
-    o.textContent = p.name;
-    if (p.id === selectedId) o.selected = true;
-    sel.appendChild(o);
-  });
-}
-
-function openFlowEditor(flowId) {
-  editingFlowId = flowId;
-  const flow = flowId ? flows.find(f=>f.id===flowId) : null;
-  document.getElementById('flowEditorTitle').textContent = flow ? 'Editar: '+flow.name : 'Novo Fluxo';
-  document.getElementById('flowName').value = flow?.name || '';
-  currentSteps = JSON.parse(JSON.stringify(flow?.steps||[]));
-
-  // Preenche funil e etapa
-  const pipelineId = flow?.pipelineId || '';
-  populatePipelineSelect(pipelineId);
-  if (pipelineId) {
-    onPipelineChange();
-    const stageSel = document.getElementById('flowTriggerStage');
-    if (stageSel) stageSel.value = flow?.triggerStage || '';
-  }
-
-  // Estado ativo/pausado
-  const isActive = flow?.active !== false;
-  setFlowActive(isActive);
-
-  renderStepsCanvas();
-  document.getElementById('flowEditor').classList.add('active');
-}
-
-function closeFlowEditor() { document.getElementById('flowEditor').classList.remove('active'); editingFlowId=null; currentSteps=[]; }
-
-function saveFlow() {
-  const name = document.getElementById('flowName').value.trim();
-  if (!name) { showToast('Dê um nome ao fluxo','err'); return; }
-  const pipelineId = document.getElementById('flowPipeline').value;
-  const pipeline = GFB_PIPELINES.find(p => p.id === pipelineId);
-  const flow = {
-    id: editingFlowId || 'flow_'+Date.now(),
-    name,
-    pipelineId: pipelineId,
-    pipelineName: pipeline?.name || '',
-    triggerStage: document.getElementById('flowTriggerStage').value,
-    active: document.getElementById('flowActive').value === 'true',
-    steps: currentSteps,
-    updatedAt: new Date().toISOString()
-  };
-  if (editingFlowId) { const idx=flows.findIndex(f=>f.id===editingFlowId); if(idx>=0) flows[idx]=flow; else flows.push(flow); }
-  else flows.push(flow);
-  LS.set('flows', JSON.stringify(flows));
-  renderFlows(); renderRDStages(); closeFlowEditor();
-  showToast('Fluxo "'+name+'" salvo!', 'ok');
-}
-
 function deleteFlow(id) {
   if (!confirm('Deletar este fluxo?')) return;
-  flows = flows.filter(f=>f.id!==id);
+  flows = flows.filter(f => f.id !== id);
   LS.set('flows', JSON.stringify(flows));
-  renderFlows(); renderRDStages();
+  renderFlows();
+  renderRDStages();
 }
 
-function addStep(type) {
-  const defaults = {
-    mensagem:{type:'mensagem',message:'',delay:0},
-    esperar:{type:'esperar',minutes:60,unit:'minutos'},
-    condicao:{type:'condicao',keyword:'',matchStage:'',noMatchStage:''},
-    acao_rd:{type:'acao_rd',action:'mover_etapa',targetStage:'',descTemplate:''}
-  };
-  currentSteps.push({...defaults[type], id:'step_'+Date.now()});
-  renderStepsCanvas();
-}
-
-function removeStep(idx) { currentSteps.splice(idx,1); renderStepsCanvas(); }
-function updateStep(idx, field, value) { if(currentSteps[idx]) currentSteps[idx][field]=value; }
-
-function renderStepsCanvas() {
-  const canvas = document.getElementById('stepsCanvas');
-  if (!currentSteps.length) { canvas.innerHTML='<div class="empty-state" style="border:1px dashed var(--border);border-radius:10px;padding:26px"><div class="empty-icon">⬡</div><div class="empty-title">Nenhum passo</div></div>'; return; }
-  const tL={mensagem:'MENSAGEM WA',esperar:'AGUARDAR',condicao:'CONDIÇÃO',acao_rd:'AÇÃO CRM'};
-  const tC={mensagem:'type-msg',esperar:'type-wait',condicao:'type-condition',acao_rd:'type-action'};
-  const ic={mensagem:'💬',esperar:'⏱',condicao:'🔀',acao_rd:'📋'};
-  canvas.innerHTML = currentSteps.map((step,idx)=>{
-    let body='';
-    if(step.type==='mensagem') body=`<div class="form-group" style="margin-bottom:7px"><label class="form-label">Mensagem</label><textarea class="form-textarea" style="min-height:60px" onchange="updateStep(${idx},'message',this.value)">${step.message||''}</textarea></div><div class="form-group" style="margin-bottom:0"><label class="form-label">Atraso (s)</label><input type="number" class="form-input" value="${step.delay||0}" onchange="updateStep(${idx},'delay',+this.value)" min="0"></div>`;
-    else if(step.type==='esperar') body=`<div class="two-col"><div class="form-group" style="margin-bottom:0"><label class="form-label">Quantidade</label><input type="number" class="form-input" value="${step.minutes||60}" onchange="updateStep(${idx},'minutes',+this.value)" min="1"></div><div class="form-group" style="margin-bottom:0"><label class="form-label">Unidade</label><select class="form-select" onchange="updateStep(${idx},'unit',this.value)"><option value="minutos" ${step.unit==='minutos'?'selected':''}>Minutos</option><option value="horas" ${step.unit==='horas'?'selected':''}>Horas</option><option value="dias" ${step.unit==='dias'?'selected':''}>Dias</option></select></div></div>`;
-    else if(step.type==='condicao') body=`<div class="form-group" style="margin-bottom:7px"><label class="form-label">Palavra-chave</label><input type="text" class="form-input" value="${step.keyword||''}" placeholder="sim, interessado" onchange="updateStep(${idx},'keyword',this.value)"></div><div class="two-col"><div class="form-group" style="margin-bottom:0"><label class="form-label">Se SIM → etapa</label><select class="form-select" onchange="updateStep(${idx},'matchStage',this.value)"><option value="">Não mover</option>${rdStages.map(s=>`<option value="${s.id}" ${step.matchStage===s.id?'selected':''}>${s.name}</option>`).join('')}</select></div><div class="form-group" style="margin-bottom:0"><label class="form-label">Se NÃO → etapa</label><select class="form-select" onchange="updateStep(${idx},'noMatchStage',this.value)"><option value="">Não mover</option>${rdStages.map(s=>`<option value="${s.id}" ${step.noMatchStage===s.id?'selected':''}>${s.name}</option>`).join('')}</select></div></div>`;
-    else if(step.type==='acao_rd') body=`<div class="form-group" style="margin-bottom:7px"><label class="form-label">Ação</label><select class="form-select" onchange="updateStep(${idx},'action',this.value)"><option value="mover_etapa" ${step.action==='mover_etapa'?'selected':''}>Mover card</option><option value="atualizar_descricao" ${step.action==='atualizar_descricao'?'selected':''}>Atualizar descrição</option><option value="ambos" ${step.action==='ambos'?'selected':''}>Mover E atualizar</option></select></div>${step.action!=='atualizar_descricao'?`<div class="form-group" style="margin-bottom:7px"><label class="form-label">Etapa destino</label><select class="form-select" onchange="updateStep(${idx},'targetStage',this.value)"><option value="">Selecione...</option>${rdStages.map(s=>`<option value="${s.id}" ${step.targetStage===s.id?'selected':''}>${s.name}</option>`).join('')}</select></div>`:''}${step.action!=='mover_etapa'?`<div class="form-group" style="margin-bottom:0"><label class="form-label">Template descrição</label><textarea class="form-textarea" style="min-height:50px" onchange="updateStep(${idx},'descTemplate',this.value)">${step.descTemplate||''}</textarea></div>`:''}`;
-    return `<div class="step-card"><div class="step-card-header"><div style="display:flex;align-items:center;gap:7px"><span style="font-size:15px">${ic[step.type]}</span><span class="step-type-badge ${tC[step.type]}">${tL[step.type]}</span><span style="font-family:var(--mono);font-size:9px;color:var(--muted)">Passo ${idx+1}</span></div><button class="btn-danger" onclick="removeStep(${idx})">✕</button></div>${body}</div>${idx<currentSteps.length-1?'<div class="step-connector">↓</div>':''}`;
-  }).join('');
-}
 
 // ====================================================================
 // INLINE INTEGRATIONS
