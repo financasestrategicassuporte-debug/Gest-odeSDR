@@ -1104,55 +1104,65 @@ async function loadWAConversations(instanceName) {
     waDebugLog('⚠ Sem instância para carregar conversas.', 'var(--warn)');
     return;
   }
-  waDebugLog('Buscando chats de "' + instance + '"...');
   try {
-    // Tenta /chat/findChats primeiro, depois /chat/fetchChats (v2)
+    // Busca os chats — tenta findChats (v1) depois fetchChats (v2)
     let data;
     try {
       data = await evoProxy('/chat/findChats/' + instance);
     } catch(e1) {
-      waDebugLog('findChats falhou (' + e1.message + '), tentando fetchChats...', 'var(--warn)');
-      data = await evoProxy('/chat/fetchChats/' + instance, 'POST', { where: {}, limit: 20 });
+      data = await evoProxy('/chat/fetchChats/' + instance, 'POST', { where: {}, limit: 50 });
     }
-    waDebugLog('Resposta chats: ' + (Array.isArray(data) ? 'array['+data.length+']' : typeof data + ' ' + JSON.stringify(data).substring(0,60)));
-    // A Evolution pode retornar array direto ou wrapped
+
+    // Normaliza resposta (array direto ou wrapped)
     const rawChats = Array.isArray(data) ? data : (data.chats || data.data || data.conversations || []);
 
-    // Ordena por: 1) não lidas primeiro, 2) timestamp mais recente
+    // Função que extrai o timestamp mais confiável de um chat
+    function getTs(c) {
+      // Pega todos os campos de timestamp possíveis e usa o maior (mais recente)
+      const candidates = [
+        c.lastMessage?.messageTimestamp,
+        c.lastMessage?.timestamp,
+        c.updatedAt ? (String(c.updatedAt).length > 12 ? c.updatedAt/1000 : c.updatedAt) : 0,
+        c.lastMsgTimestamp,
+        c.timestamp,
+      ].map(v => Number(v) || 0);
+      return Math.max(...candidates);
+    }
+
+    // Função que extrai não lidas (testa todos os campos possíveis da Evolution)
+    function getUnread(c) {
+      return Number(c.unreadCount || c.unreadMessages || c.unread ||
+        c.messagesUnread || c.count?.unread || 0);
+    }
+
+    // Remove broadcasts e ordena: não lidas primeiro, depois por recência
     const chats = rawChats
-      .filter(c => !c.id?.includes('@broadcast'))  // remove lista de transmissão
+      .filter(c => c.id && !String(c.id).includes('@broadcast') && !String(c.id).includes('@newsletter'))
       .sort((a, b) => {
-        const unreadA = a.unreadCount || a.unreadMessages || 0;
-        const unreadB = b.unreadCount || b.unreadMessages || 0;
-        // Conversas com não lidas sobem para o topo
-        if (unreadB !== unreadA) return unreadB - unreadA;
-        // Depois ordena por timestamp da última mensagem (mais recente primeiro)
-        const tsA = a.lastMessage?.messageTimestamp || a.updatedAt || a.lastMsgTimestamp || 0;
-        const tsB = b.lastMessage?.messageTimestamp || b.updatedAt || b.lastMsgTimestamp || 0;
-        return tsB - tsA;
+        const ua = getUnread(a), ub = getUnread(b);
+        if (ub !== ua) return ub - ua;       // mais não lidas sobe
+        return getTs(b) - getTs(a);          // mais recente sobe
       })
-      .slice(0, 15);  // mostra até 15 conversas
+      .slice(0, 20);
+
     if (!chats.length) {
-      if (list) list.innerHTML = '<div class="empty-state" style="padding:16px"><div class="empty-sub">Nenhuma conversa recente em "' + instance + '".</div></div>';
+      if (list) list.innerHTML = '<div class="empty-state" style="padding:16px"><div class="empty-sub">Nenhuma conversa em "' + instance + '".</div></div>';
       return;
     }
-    waDebugLog('✓ ' + chats.length + ' conversas carregadas', 'var(--accent)');
-    // Log raw fields of first chat to diagnose unread/timestamp field names
+
+    // Debug discreto no console (não polui o painel)
     if (rawChats[0]) {
-      const sample = rawChats[0];
-      const fields = {
-        id: sample.id,
-        unreadCount: sample.unreadCount,
-        unreadMessages: sample.unreadMessages,
-        unread: sample.unread,
-        notSpam: sample.notSpam,
-        lastMsgTimestamp: sample.lastMsgTimestamp,
-        updatedAt: sample.updatedAt,
-        lastMessageTs: sample.lastMessage?.messageTimestamp,
-        pushName: sample.pushName,
-        name: sample.name,
-      };
-      waDebugLog('📊 Campos raw: ' + JSON.stringify(fields).substring(0, 200), 'var(--ms)');
+      const s = rawChats[0];
+      console.log('[WA] Amostra raw:', {
+        id: s.id, unreadCount: s.unreadCount, unreadMessages: s.unreadMessages,
+        unread: s.unread, messagesUnread: s.messagesUnread,
+        updatedAt: s.updatedAt, lastMsgTimestamp: s.lastMsgTimestamp,
+        lastMessageTs: s.lastMessage?.messageTimestamp,
+        pushName: s.pushName, name: s.name
+      });
+      console.log('[WA] Top 3 após sort:', chats.slice(0,3).map(c => ({
+        id: c.id, unread: getUnread(c), ts: getTs(c), name: c.pushName || c.name
+      })));
     }
 
     // Helper: converte ID @lid/@s.whatsapp.net para número legível
@@ -1204,10 +1214,18 @@ async function loadWAConversations(instanceName) {
         || '';
       const lastMsg = msg ? (msg.length > 50 ? msg.substring(0,50)+'…' : msg) : '(sem mensagem)';
 
-      const ts = c.lastMessage?.messageTimestamp || c.updatedAt || c.lastMsgTimestamp;
-      const time = ts ? new Date((ts>9999999999?ts:ts*1000)).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}) : '';
+      const ts = getTs(c);
+      const now = Date.now() / 1000;
+      let time = '';
+      if (ts) {
+        const d = new Date(ts * 1000);
+        const isToday = (now - ts) < 86400;
+        time = isToday
+          ? d.toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'})
+          : d.toLocaleDateString('pt-BR', {day:'2-digit', month:'2-digit'});
+      }
 
-      const unread = c.unreadCount || c.unreadMessages || 0;
+      const unread = getUnread(c);
       const isGroup = rawId.includes('@g.us') || rawId.includes('(grupo)');
       const avatarGradient = instColor(instance);
 
