@@ -562,6 +562,13 @@ let rdStages = JSON.parse(LS.get('rd_stages') || '[]');
 let editingFlowId = null;
 let currentSteps = [];
 
+// Pipelines GFB fixos
+const GFB_PIPELINES = [
+  { id: '694066f13f55a5001b50eafb', name: 'Funil Leads Frios (Até 40k)' },
+  { id: '694aabf03f1ed8001d44a46b', name: 'Webnários Quentes (Preen.Aplicação)' },
+  { id: '6a00b9afc9e2b10013a75652', name: 'Funil +40k' }
+];
+
 // ====================================================================
 // PROXY — todas as chamadas externas passam por aqui
 // Resolve CORS e HTTP 401 causados por bloqueio de origem
@@ -640,17 +647,27 @@ async function _testRD(resultEl) {
 async function fetchRDStages() {
   const badge = document.getElementById('rdStagesBadge');
   badge.textContent = 'CARREGANDO...';
+  rdStages = [];
   try {
-    const endpoint = config.rdPipelineId
-      ? `deal_stages?deal_pipeline_id=${config.rdPipelineId}`
-      : 'deal_stages';
-    const data = await rdFetch(endpoint);
-    const stages = data.deal_stages || data || [];
-    rdStages = stages.map(s => ({ id: s._id||s.id, name: s.name }));
+    for (const pipeline of GFB_PIPELINES) {
+      try {
+        const data = await rdFetch('deal_stages?deal_pipeline_id=' + pipeline.id);
+        const stages = data.deal_stages || data || [];
+        stages.forEach(s => rdStages.push({
+          id: s._id || s.id,
+          name: s.name,
+          pipelineId: pipeline.id,
+          pipelineName: pipeline.name
+        }));
+      } catch(e2) {
+        addDispatchLog('Erro no funil ' + pipeline.name + ': ' + e2.message);
+      }
+    }
     LS.set('rd_stages', JSON.stringify(rdStages));
     renderRDStages();
     populateStageTriggerSelect();
     badge.textContent = rdStages.length + ' ETAPAS';
+    addDispatchLog('RD: ' + rdStages.length + ' etapas carregadas dos 3 funis');
   } catch(e) {
     badge.textContent = 'ERRO';
     addDispatchLog('RD etapas erro: ' + e.message);
@@ -889,12 +906,34 @@ function renderFlows() {
 
 function renderRDStages() {
   const list = document.getElementById('rdStagesList');
-  if (!rdStages.length) { list.innerHTML='<div class="empty-state" style="padding:14px"><div class="empty-sub">Conecte o RD Station para ver as etapas.</div></div>'; return; }
-  const colors=['#00e5a0','#0066ff','#ff6b35','#ff2d55','#7c3aed','#4d9fff'];
-  list.innerHTML='<div class="stages-list">'+rdStages.map((s,i)=>{
-    const linked=flows.filter(f=>f.triggerStage===s.id);
-    return `<div class="stage-item"><div class="stage-dot" style="background:${colors[i%colors.length]}"></div><div class="stage-name">${s.name}</div><div class="stage-flow-link">${linked.length?linked.map(f=>f.name).join(', '):'sem fluxo'}</div></div>`;
-  }).join('')+'</div>';
+  if (!rdStages.length) {
+    list.innerHTML = '<div class="empty-state" style="padding:14px"><div class="empty-sub">Conecte o RD Station para ver as etapas.</div></div>';
+    return;
+  }
+  const colors = ['#00e5a0','#0066ff','#ff6b35','#ff2d55','#7c3aed','#4d9fff'];
+  // Agrupa por pipeline
+  const byPipeline = {};
+  rdStages.forEach(s => {
+    const key = s.pipelineName || 'Funil';
+    if (!byPipeline[key]) byPipeline[key] = [];
+    byPipeline[key].push(s);
+  });
+  let html = '';
+  Object.entries(byPipeline).forEach(([pname, stages]) => {
+    html += '<div style="margin-bottom:14px">';
+    html += '<div style="font-family:var(--mono);font-size:9px;letter-spacing:1px;color:var(--accent);margin-bottom:8px;text-transform:uppercase">' + pname + '</div>';
+    html += '<div class="stages-list">';
+    stages.forEach((s, i) => {
+      const linked = flows.filter(f => f.triggerStage === s.id);
+      html += '<div class="stage-item">';
+      html += '<div class="stage-dot" style="background:' + colors[i % colors.length] + '"></div>';
+      html += '<div class="stage-name">' + s.name + '</div>';
+      html += '<div class="stage-flow-link">' + (linked.length ? linked.map(f=>f.name).join(', ') : 'sem fluxo') + '</div>';
+      html += '</div>';
+    });
+    html += '</div></div>';
+  });
+  list.innerHTML = html;
 }
 
 function populateStageTriggerSelect() {
@@ -1041,10 +1080,11 @@ function updateWebhookUrls() {
 
 function updateStatuses() {
   setStatus('claudeStatus', !!config.claudeApiKey);
-  setStatus('rdStatus', !!config.rdApiToken, config.rdApiToken?'TOKEN OK':'DESCONECTADO');
-  setStatus('supabaseStatus', !!(config.supabaseUrl&&config.supabaseKey));
-  setStatus('evolutionStatus', !!(config.evolutionUrl&&config.evolutionToken));
+  setStatus('rdStatus', !!config.rdApiToken, config.rdApiToken ? 'CONECTADO' : 'DESCONECTADO');
+  setStatus('supabaseStatus', !!(config.supabaseUrl && config.supabaseKey));
+  setStatus('evolutionStatus', !!(config.evolutionUrl && config.evolutionToken));
   if (config.claudeApiKey) document.querySelector('.status-text').textContent = 'CLAUDE ATIVO';
+  if (config.claudeApiKey && config.rdApiToken) document.querySelector('.status-text').textContent = 'SISTEMA ATIVO';
 }
 
 // Verifica se o proxy está acessível
@@ -1113,7 +1153,7 @@ function showToast(msg, type='ok') {
 // ====================================================================
 // INIT
 // ====================================================================
-window.onload = () => {
+window.onload = async () => {
   updateStatuses();
   updateWebhookUrls();
   renderFlows();
@@ -1121,6 +1161,10 @@ window.onload = () => {
   populateStageTriggerSelect();
   checkProxy();
   document.getElementById('serverUrl').value = config.serverUrl || '';
+  // Auto-carrega etapas dos 3 funis se RD já estiver configurado
+  if (config.rdApiToken && !rdStages.length) {
+    setTimeout(() => fetchRDStages(), 1500);
+  }
 };
 </script>
 </body>
