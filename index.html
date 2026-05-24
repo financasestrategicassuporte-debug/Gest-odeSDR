@@ -914,19 +914,26 @@ function evoHeaders() {
 }
 
 async function _testEvolution(resultEl) {
+  if (!config.evolutionUrl || !config.evolutionToken) {
+    setStatus('evolutionStatus', false);
+    resultEl.style.color = 'var(--danger)';
+    resultEl.textContent = '✗ URL e API Key obrigatórios';
+    return;
+  }
+  resultEl.textContent = '⏳ Testando...'; resultEl.style.color = 'var(--warn)';
   try {
-    if (!config.evolutionUrl || !config.evolutionToken) throw new Error('URL e API Key obrigatórios');
-    const res = await fetch(config.evolutionUrl + '/instance/fetchInstances', { headers: evoHeaders() });
-    if (res.ok) {
-      const data = await res.json();
-      setStatus('evolutionStatus', true, 'CONECTADO');
-      resultEl.style.color = 'var(--accent)';
-      resultEl.textContent = '✓ Evolution conectada! Instâncias: ' + (Array.isArray(data) ? data.length : '?');
-    } else throw new Error('HTTP ' + res.status);
+    const data = await evoProxy('/instance/fetchInstances');
+    const count = Array.isArray(data) ? data.length : (data.instances?.length || data.data?.length || '?');
+    setStatus('evolutionStatus', true, 'CONECTADO');
+    resultEl.style.color = 'var(--accent)';
+    resultEl.textContent = '✓ Evolution conectada! Instâncias: ' + count;
+    // Atualiza o painel ao vivo automaticamente após teste
+    setTimeout(() => checkAllChips(), 300);
   } catch(e) {
     setStatus('evolutionStatus', false);
     resultEl.style.color = 'var(--danger)';
-    resultEl.textContent = '✗ ' + e.message;
+    const isCors = e.message.includes('fetch') || e.message.includes('Failed') || e.message.includes('CORS');
+    resultEl.textContent = '✗ ' + e.message + (isCors ? ' — habilite CORS na Evolution para ' + window.location.origin : '');
   }
 }
 
@@ -953,40 +960,110 @@ async function sendWhatsApp() {
 
 
 // ── WHATSAPP AO VIVO ──────────────────────────────────────────────
+async function evoProxy(path, method='GET', body=null) {
+  // Tenta via proxy Vercel primeiro (evita CORS). Fallback: direto.
+  const headers = { 'Content-Type': 'application/json' };
+  const proxyPayload = {
+    service: '__evo__',
+    evoUrl: config.evolutionUrl,
+    evoToken: config.evolutionToken,
+    path, method,
+    body: body || undefined
+  };
+  try {
+    const r = await fetch('/api/proxy', { method:'POST', headers, body: JSON.stringify(proxyPayload) });
+    // Se proxy retornar 400 com "serviço desconhecido" significa proxy online mas sem suporte a evo
+    if (r.status === 400) throw new Error('proxy_no_evo');
+    if (r.ok) return r.json();
+    throw new Error('proxy_http_' + r.status);
+  } catch(proxyErr) {
+    // Fallback: chamada direta (funciona se Evolution tiver CORS liberado)
+    const directOpts = { method, headers: { 'Content-Type': 'application/json', 'apikey': config.evolutionToken } };
+    if (body) directOpts.body = JSON.stringify(body);
+    const r2 = await fetch(config.evolutionUrl + path, directOpts);
+    if (!r2.ok) throw new Error('HTTP ' + r2.status + ' (direto)');
+    return r2.json();
+  }
+}
+
+function waDebugLog(msg, color='var(--muted)') {
+  const list = document.getElementById('waDashConvList');
+  if (!list) return;
+  const existing = list.querySelector('.wa-debug-log');
+  let log = existing;
+  if (!log) {
+    list.innerHTML = '<div class="wa-debug-log" style="padding:12px 18px;font-family:var(--mono);font-size:10px;line-height:2"></div>';
+    log = list.querySelector('.wa-debug-log');
+  }
+  const line = document.createElement('div');
+  line.style.color = color;
+  line.textContent = '▸ ' + msg;
+  log.appendChild(line);
+  log.scrollTop = log.scrollHeight;
+}
+
 async function checkAllChips() {
   const chipBar = document.getElementById('waChipBar');
   const chipStatus = document.getElementById('waChipStatus');
+  const list = document.getElementById('waDashConvList');
+
+  // Limpa e inicia debug
+  if (list) list.innerHTML = '<div class="wa-debug-log" style="padding:12px 18px;font-family:var(--mono);font-size:10px;line-height:2"></div>';
+
   if (!config.evolutionUrl || !config.evolutionToken) {
+    waDebugLog('❌ Sem config: vá em Integrações → Evolution e salve URL + API Key', 'var(--danger)');
     if (chipStatus) { chipStatus.textContent = 'SEM CONFIG'; chipStatus.style.background = 'rgba(255,45,85,.1)'; chipStatus.style.color = 'var(--danger)'; }
     return;
   }
+  waDebugLog('URL: ' + config.evolutionUrl, 'var(--accent)');
+  waDebugLog('Token: ' + (config.evolutionToken ? config.evolutionToken.substring(0,8)+'...' : 'VAZIO'), 'var(--accent)');
+  if (chipStatus) { chipStatus.textContent = 'BUSCANDO...'; chipStatus.style.background = 'rgba(255,107,53,.1)'; chipStatus.style.color = 'var(--warn)'; }
+
   try {
-    const res = await fetch(config.evolutionUrl + '/instance/fetchInstances', { headers: evoHeaders() });
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-    const data = await res.json();
-    // A Evolution pode retornar array direto ou objeto com array dentro
-    const instances = Array.isArray(data) ? data : (data.instances || data.data || []);
-    if (!instances.length) {
-      if (chipStatus) { chipStatus.textContent = 'SEM INSTÂNCIA'; chipStatus.style.background = 'rgba(255,107,53,.1)'; chipStatus.style.color = 'var(--warn)'; }
+    waDebugLog('Chamando /instance/fetchInstances...');
+    let data;
+    try {
+      data = await evoProxy('/instance/fetchInstances');
+      waDebugLog('✓ Resposta recebida via proxy/direto', 'var(--accent)');
+    } catch(e) {
+      waDebugLog('❌ Erro na chamada: ' + e.message, 'var(--danger)');
+      waDebugLog('→ Verifique CORS na Evolution: permita origem ' + window.location.origin, 'var(--warn)');
+      if (chipStatus) { chipStatus.textContent = 'ERRO CORS/REDE'; chipStatus.style.background='rgba(255,45,85,.1)'; chipStatus.style.color='var(--danger)'; }
       return;
     }
-    // Verifica status de cada instância
+
+    waDebugLog('Tipo da resposta: ' + (Array.isArray(data) ? 'array['+data.length+']' : typeof data));
+
+    // Evolution v1 retorna array direto, v2 pode retornar {instances:[...]} ou {data:[...]}
+    const instances = Array.isArray(data) ? data : (data.instances || data.data || Object.values(data));
+    waDebugLog('Instâncias encontradas: ' + instances.length, instances.length ? 'var(--accent)' : 'var(--warn)');
+
+    if (!instances.length) {
+      waDebugLog('⚠ Nenhuma instância retornada. Verifique a API Key.', 'var(--warn)');
+      if (chipStatus) { chipStatus.textContent = 'SEM INSTÂNCIA'; chipStatus.style.background='rgba(255,107,53,.1)'; chipStatus.style.color='var(--warn)'; }
+      return;
+    }
+
     let html = '<span style="color:var(--muted)">Chips:</span>';
     let anyConnected = false;
     let firstConnectedInstance = null;
+
     for (const inst of instances) {
-      // Suporta diferentes formatos de resposta da Evolution API v1 e v2
       const name = inst.instance?.instanceName || inst.instanceName || inst.name || inst.id || '?';
-      // Estado pode já vir no objeto sem precisar de segunda chamada
-      let state = inst.instance?.state || inst.state || inst.connectionStatus || null;
-      if (!state) {
+      let state = inst.instance?.state || inst.instance?.connectionStatus || inst.state || inst.connectionStatus || null;
+      waDebugLog('Instância "' + name + '" estado inicial: ' + (state || 'não informado'));
+
+      if (!state || state === 'unknown') {
         try {
-          const sr = await fetch(config.evolutionUrl + '/instance/connectionState/' + name, { headers: evoHeaders() });
-          const sd = await sr.json();
+          const sd = await evoProxy('/instance/connectionState/' + name);
           state = sd.instance?.state || sd.state || sd.connectionStatus || 'unknown';
-        } catch { state = 'unknown'; }
+          waDebugLog('  Estado via connectionState: ' + state);
+        } catch(e2) {
+          waDebugLog('  Erro ao checar estado: ' + e2.message, 'var(--warn)');
+          state = 'unknown';
+        }
       }
-      const connected = state === 'open' || state === 'CONNECTED';
+      const connected = state === 'open' || state === 'CONNECTED' || state === 'connected';
       if (connected && !firstConnectedInstance) firstConnectedInstance = name;
       if (connected) anyConnected = true;
       html += `<span style="display:inline-flex;align-items:center;gap:4px;margin-left:8px;padding:2px 8px;border-radius:20px;background:${connected?'rgba(0,229,160,.1)':'rgba(255,45,85,.1)'};color:${connected?'var(--accent)':'var(--danger)'}">
@@ -1000,10 +1077,16 @@ async function checkAllChips() {
       chipStatus.style.background = anyConnected ? 'rgba(0,229,160,.1)' : 'rgba(255,45,85,.1)';
       chipStatus.style.color = anyConnected ? 'var(--accent)' : 'var(--danger)';
     }
-    // FIX: usa a primeira instância conectada encontrada se config.evolutionInstance não estiver definido
+
     const instanceToLoad = config.evolutionInstance || firstConnectedInstance;
-    if (instanceToLoad) await loadWAConversations(instanceToLoad);
+    if (instanceToLoad) {
+      waDebugLog('Carregando conversas de: ' + instanceToLoad, 'var(--accent)');
+      await loadWAConversations(instanceToLoad);
+    } else {
+      waDebugLog('⚠ Nenhuma instância conectada para carregar conversas.', 'var(--warn)');
+    }
   } catch(e) {
+    waDebugLog('❌ Erro inesperado: ' + e.message, 'var(--danger)');
     if (chipStatus) { chipStatus.textContent = 'ERRO'; }
     console.error('[checkAllChips]', e);
   }
@@ -1012,27 +1095,30 @@ async function checkAllChips() {
 async function loadWAConversations(instanceName) {
   const list = document.getElementById('waDashConvList');
   if (!config.evolutionUrl || !config.evolutionToken) return;
-  // FIX: aceita instância como parâmetro, fallback para config salva
   const instance = instanceName || config.evolutionInstance;
   if (!instance) {
-    if (list) list.innerHTML = '<div class="empty-state" style="padding:16px"><div class="empty-sub">Instância não detectada. Preencha "Instância Padrão" nas Integrações.</div></div>';
+    waDebugLog('⚠ Sem instância para carregar conversas.', 'var(--warn)');
     return;
   }
-  if (list) list.innerHTML = '<div class="empty-state" style="padding:16px"><div class="empty-sub">⏳ Carregando conversas de ' + instance + '...</div></div>';
+  waDebugLog('Buscando chats de "' + instance + '"...');
   try {
-    const res = await fetch(config.evolutionUrl + '/chat/findChats/' + instance, { headers: evoHeaders() });
-    if (!res.ok) {
-      if (list) list.innerHTML = '<div class="empty-state" style="padding:16px"><div class="empty-sub">Erro HTTP ' + res.status + ' ao buscar conversas.</div></div>';
-      return;
+    // Tenta /chat/findChats primeiro, depois /chat/fetchChats (v2)
+    let data;
+    try {
+      data = await evoProxy('/chat/findChats/' + instance);
+    } catch(e1) {
+      waDebugLog('findChats falhou (' + e1.message + '), tentando fetchChats...', 'var(--warn)');
+      data = await evoProxy('/chat/fetchChats/' + instance, 'POST', { where: {}, limit: 20 });
     }
-    const data = await res.json();
+    waDebugLog('Resposta chats: ' + (Array.isArray(data) ? 'array['+data.length+']' : typeof data + ' ' + JSON.stringify(data).substring(0,60)));
     // A Evolution pode retornar array direto ou wrapped
-    const rawChats = Array.isArray(data) ? data : (data.chats || data.data || []);
+    const rawChats = Array.isArray(data) ? data : (data.chats || data.data || data.conversations || []);
     const chats = rawChats.slice(0, 8);
     if (!chats.length) {
-      if (list) list.innerHTML = '<div class="empty-state" style="padding:16px"><div class="empty-sub">Nenhuma conversa recente.</div></div>';
+      if (list) list.innerHTML = '<div class="empty-state" style="padding:16px"><div class="empty-sub">Nenhuma conversa recente em "' + instance + '".</div></div>';
       return;
     }
+    waDebugLog('✓ ' + chats.length + ' conversas carregadas', 'var(--accent)');
     if (list) list.innerHTML = chats.map(c => {
       const name = c.name || c.pushName || c.id?.replace('@s.whatsapp.net','') || 'Desconhecido';
       const initials = name.split(' ').map(w=>w[0]).join('').substring(0,2).toUpperCase();
