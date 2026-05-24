@@ -1128,7 +1128,21 @@ async function loadWAConversations(instanceName) {
     waDebugLog('Resposta chats: ' + (Array.isArray(data) ? 'array['+data.length+']' : typeof data + ' ' + JSON.stringify(data).substring(0,60)));
     // A Evolution pode retornar array direto ou wrapped
     const rawChats = Array.isArray(data) ? data : (data.chats || data.data || data.conversations || []);
-    const chats = rawChats.slice(0, 8);
+
+    // Ordena por: 1) não lidas primeiro, 2) timestamp mais recente
+    const chats = rawChats
+      .filter(c => !c.id?.includes('@broadcast'))  // remove lista de transmissão
+      .sort((a, b) => {
+        const unreadA = a.unreadCount || a.unreadMessages || 0;
+        const unreadB = b.unreadCount || b.unreadMessages || 0;
+        // Conversas com não lidas sobem para o topo
+        if (unreadB !== unreadA) return unreadB - unreadA;
+        // Depois ordena por timestamp da última mensagem (mais recente primeiro)
+        const tsA = a.lastMessage?.messageTimestamp || a.updatedAt || a.lastMsgTimestamp || 0;
+        const tsB = b.lastMessage?.messageTimestamp || b.updatedAt || b.lastMsgTimestamp || 0;
+        return tsB - tsA;
+      })
+      .slice(0, 15);  // mostra até 15 conversas
     if (!chats.length) {
       if (list) list.innerHTML = '<div class="empty-state" style="padding:16px"><div class="empty-sub">Nenhuma conversa recente em "' + instance + '".</div></div>';
       return;
@@ -2098,9 +2112,16 @@ window.onload = async () => {
   renderFlows();
   checkProxy();
   document.getElementById('serverUrl').value = config.serverUrl || '';
-  // FIX: inicializa o painel WhatsApp ao vivo automaticamente
+  // Inicializa o painel WhatsApp ao vivo automaticamente
   if (config.evolutionUrl && config.evolutionToken) {
     setTimeout(() => checkAllChips(), 500);
+    // Auto-refresh a cada 30s para mostrar conversas em tempo real
+    setInterval(() => {
+      if (config.evolutionUrl && config.evolutionToken) {
+        const instance = config.evolutionInstance;
+        if (instance) loadWAConversations(instance);
+      }
+    }, 30000);
   }
 
   // Invalida cache antigo sem pipelineName e re-busca sempre que tiver token
