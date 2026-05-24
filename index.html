@@ -341,7 +341,7 @@
             <span style="color:var(--muted)">Chip:</span>
             <span id="waChipName" style="color:var(--muted)">—</span>
           </div>
-          <div class="panel-body" style="padding:0 18px;max-height:280px;overflow-y:auto" id="waDashConvList">
+          <div class="panel-body" style="padding:0 18px;max-height:420px;overflow-y:auto" id="waDashConvList">
             <div class="empty-state" style="padding:20px"><div class="empty-sub">Configure a Evolution API para ver conversas.</div></div>
           </div>
         </div>
@@ -1140,14 +1140,17 @@ async function loadWAConversations(instanceName) {
 
   function formatPhone(rawId) {
     if (!rawId) return '';
-    let id = String(rawId).replace(/@s\.whatsapp\.net/,'').replace(/@lid/,'')
-      .replace(/@g\.us.*/,'').replace(/:.*$/,'').trim();
-    if (rawId.includes('@g.us')) return '\uD83D\uDC65 Grupo';
+    const s = String(rawId);
+    if (s.includes('@g.us')) return '\uD83D\uDC65 Grupo';
+    // @lid = internal WhatsApp ID, not a real phone number
+    if (s.includes('@lid')) return '';
+    let id = s.replace(/@s\.whatsapp\.net/,'').replace(/:.*$/,'').trim();
     if (/^\d{12,13}$/.test(id) && id.startsWith('55')) {
       const ddd = id.slice(2,4), num = id.slice(4);
       return '+55 (' + ddd + ') ' + (num.length>=9 ? num.slice(0,5)+'-'+num.slice(5) : num.slice(0,4)+'-'+num.slice(4));
     }
-    return id;
+    if (/^\d{10,15}$/.test(id)) return id;
+    return '';
   }
 
   try {
@@ -1184,7 +1187,7 @@ async function loadWAConversations(instanceName) {
     list.innerHTML = chats.map(c => {
       const rawId = c.id;
       const phone = formatPhone(rawId);
-      const name = c.pushName || c.name || c.verifiedName || phone || 'Desconhecido';
+      const name = c.pushName || c.name || c.verifiedName || (phone||'') || (rawId.replace(/@.*$/,'').substring(0,15)) || 'Desconhecido';
       const phoneLabel = (phone && phone !== name) ? phone : '';
       const initials = name.replace(/[^a-zA-Z0-9\u00C0-\u024F]/g,' ').trim()
         .split(/\s+/).filter(Boolean).map(w=>w[0]).join('').substring(0,2).toUpperCase() || '?';
