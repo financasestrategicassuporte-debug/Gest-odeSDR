@@ -1155,107 +1155,24 @@ async function loadWAConversations(instanceName) {
   try {
     let rawChats = [];
 
-    // Tenta 1: GET /chat/findChats (Evolution v1 — sem body)
-    if (!rawChats.length) {
-      vlog('Tentando GET /chat/findChats/' + instance + '...');
-      try {
-        const d = await evoProxy('/chat/findChats/' + instance, 'GET');
-        const arr = Array.isArray(d) ? d : (d.chats || d.data || d.conversations || []);
-        vlog('GET findChats → ' + (arr.length ? arr.length + ' chats ✓' : 'array vazio'), arr.length ? 'var(--accent)' : 'var(--warn)');
-        if (arr.length) rawChats = arr;
-      } catch(e1) { vlog('GET findChats → ' + e1.message.substring(0,80), 'var(--danger)'); }
-    }
-
-    // Tenta 2: POST /chat/findChats com body
-    if (!rawChats.length) {
-      vlog('Tentando POST /chat/findChats/' + instance + '...');
-      try {
-        const d = await evoProxy('/chat/findChats/' + instance, 'POST', { where: {}, limit: 50 });
-        const arr = Array.isArray(d) ? d : (d.chats || d.data || d.conversations || []);
-        vlog('POST findChats → ' + (arr.length ? arr.length + ' chats ✓' : 'array vazio'), arr.length ? 'var(--accent)' : 'var(--warn)');
-        if (arr.length) rawChats = arr;
-      } catch(e2) { vlog('POST findChats → ' + e2.message.substring(0,80), 'var(--danger)'); }
-    }
-
-    // Tenta 3: POST /chat/fetchChats
-    if (!rawChats.length) {
-      vlog('Tentando POST /chat/fetchChats/' + instance + '...');
-      try {
-        const d = await evoProxy('/chat/fetchChats/' + instance, 'POST', { where: {}, limit: 50 });
-        const arr = Array.isArray(d) ? d : (d.chats || d.data || d.conversations || []);
-        vlog('POST fetchChats → ' + (arr.length ? arr.length + ' chats ✓' : 'array vazio'), arr.length ? 'var(--accent)' : 'var(--warn)');
-        if (arr.length) rawChats = arr;
-      } catch(e3) { vlog('POST fetchChats → ' + e3.message.substring(0,80), 'var(--danger)'); }
-    }
-
-    // Tenta 4: GET /chat/fetchChats
-    if (!rawChats.length) {
-      vlog('Tentando GET /chat/fetchChats/' + instance + '...');
-      try {
-        const d = await evoProxy('/chat/fetchChats/' + instance, 'GET');
-        const arr = Array.isArray(d) ? d : (d.chats || d.data || d.conversations || []);
-        vlog('GET fetchChats → ' + (arr.length ? arr.length + ' chats ✓' : 'array vazio'), arr.length ? 'var(--accent)' : 'var(--warn)');
-        if (arr.length) rawChats = arr;
-      } catch(e4) { vlog('GET fetchChats → ' + e4.message.substring(0,80), 'var(--danger)'); }
-    }
-
-    // Tenta 5: POST /message/findMessages agrupado
-    if (!rawChats.length) {
-      vlog('Tentando POST /message/findMessages/' + instance + '...');
-      try {
-        const msgData = await evoProxy('/message/findMessages/' + instance, 'POST', {
-          where: {}, limit: 100, orderBy: { messageTimestamp: 'desc' }
-        });
-        const msgs = Array.isArray(msgData) ? msgData : (msgData?.messages?.records || msgData?.messages || msgData?.data || []);
-        vlog('POST findMessages → ' + msgs.length + ' msgs raw', msgs.length ? 'var(--accent)' : 'var(--warn)');
-        if (msgs.length > 0) {
-          const chatMap = {};
-          for (const m of msgs) {
-            const jid = m.key?.remoteJid || m.remoteJid;
-            if (!jid || jid.includes('@broadcast') || jid.includes('@newsletter')) continue;
-            if (!chatMap[jid] || (m.messageTimestamp||0) > (chatMap[jid].lastMessage?.messageTimestamp||0)) {
-              chatMap[jid] = {
-                id: jid,
-                pushName: m.pushName || m.key?.participant || '',
-                lastMessage: { messageTimestamp: m.messageTimestamp||m.timestamp, message: m.message, body: m.body },
-                unreadCount: 0
-              };
-            }
-          }
-          rawChats = Object.values(chatMap);
-          vlog('Agrupado → ' + rawChats.length + ' chats únicos ✓', rawChats.length ? 'var(--accent)' : 'var(--warn)');
-        }
-      } catch(e5) { vlog('POST findMessages → ' + e5.message.substring(0,80), 'var(--danger)'); }
-    }
-
-    // Tenta 6: GET /message/findMessages (sem body)
-    if (!rawChats.length) {
-      vlog('Tentando GET /message/findMessages/' + instance + '...');
-      try {
-        const msgData = await evoProxy('/message/findMessages/' + instance, 'GET');
-        const msgs = Array.isArray(msgData) ? msgData : (msgData?.messages?.records || msgData?.messages || msgData?.data || []);
-        vlog('GET findMessages → ' + msgs.length + ' msgs', msgs.length ? 'var(--accent)' : 'var(--warn)');
-        if (msgs.length > 0) {
-          const chatMap = {};
-          for (const m of msgs) {
-            const jid = m.key?.remoteJid || m.remoteJid;
-            if (!jid || jid.includes('@broadcast') || jid.includes('@newsletter')) continue;
-            if (!chatMap[jid]) chatMap[jid] = { id: jid, pushName: m.pushName||'', lastMessage: { messageTimestamp: m.messageTimestamp, message: m.message }, unreadCount: 0 };
-          }
-          rawChats = Object.values(chatMap);
-          if (rawChats.length) vlog('Agrupado → ' + rawChats.length + ' chats ✓', 'var(--accent)');
-        }
-      } catch(e6) { vlog('GET findMessages → ' + e6.message.substring(0,80), 'var(--danger)'); }
+    // CONFIRMADO: GET /chat/findChats é o endpoint correto desta Evolution
+    try {
+      const d = await evoProxy('/chat/findChats/' + instance, 'GET');
+      let arr = Array.isArray(d) ? d : (d.chats || d.data || d.conversations || d.records || []);
+      if (!Array.isArray(arr) && typeof arr === 'object') arr = Object.values(arr);
+      vlog('GET /chat/findChats → ' + arr.length + ' chats', arr.length ? 'var(--accent)' : 'var(--warn)');
+      if (arr.length) rawChats = arr;
+      else vlog('Resposta: ' + JSON.stringify(d).substring(0, 200), 'var(--warn)');
+    } catch(e1) {
+      vlog('GET /chat/findChats falhou: ' + e1.message.substring(0, 100), 'var(--danger)');
     }
 
     if (!rawChats.length) {
-      vlog('', 'var(--muted)');
-      vlog('⚠ Todos os endpoints falharam ou retornaram vazio.', 'var(--warn)');
-      vlog('→ Copie esses logs e me mande para eu corrigir.', 'var(--warn)');
+      vlog('⚠ Nenhum chat retornado — verifique se a instância tem conversas.', 'var(--warn)');
       return;
     }
 
-    vlog('✓ ' + rawChats.length + ' chats carregados. Renderizando...', 'var(--accent)');
+    vlog('✓ ' + rawChats.length + ' chats. Renderizando...', 'var(--accent)');
 
     // Ordena: não lidas primeiro, depois por timestamp desc
     const chats = rawChats
@@ -1549,8 +1466,19 @@ async function runWADiagnostic() {
     }
   }
 
-  // Testa endpoints de mensagens se tiver JID
-  if (testJid) {
+  // Busca JID automaticamente se a lista estava vazia
+  let resolvedJid = testJid;
+  if (!resolvedJid) {
+    try {
+      const d = await evoProxy('/chat/findChats/' + instance, 'GET');
+      const arr = Array.isArray(d) ? d : (d.chats || d.data || []);
+      if (arr.length) resolvedJid = arr[0].id || arr[0].remoteJid || null;
+    } catch(e) {}
+  }
+
+  // Testa endpoints de mensagens
+  if (resolvedJid) {
+    const testJid = resolvedJid;
     const msgEndpoints = [
       { label: 'POST /chat/findMessages (where.key)', fn: () => evoProxy('/chat/findMessages/'+instance,'POST',{where:{key:{remoteJid:testJid}},limit:5}) },
       { label: 'POST /chat/findMessages (flat)', fn: () => evoProxy('/chat/findMessages/'+instance,'POST',{remoteJid:testJid,limit:5}) },
