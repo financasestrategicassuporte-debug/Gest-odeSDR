@@ -332,6 +332,7 @@
             <div class="panel-title">WhatsApp — Ao Vivo</div>
             <div style="display:flex;align-items:center;gap:8px">
               <div id="waChipStatus" class="panel-badge" style="cursor:pointer" onclick="checkAllChips()">VERIFICANDO...</div>
+              <button class="btn-secondary btn-sm" style="font-size:9px" title="Diagnóstico de endpoints" onclick="runWADiagnostic()">🔬</button>
               <button class="btn-secondary btn-sm" style="font-size:9px" onclick="checkAllChips()">↺</button>
             </div>
           </div>
@@ -1341,39 +1342,97 @@ async function openWAChat(remoteJid, instance, name) {
   }, 5000);
 }
 
+// Cache do endpoint que funcionou para não tentar os outros toda vez
+let _workingMsgEndpoint = null;
+
+async function _fetchChatMessages(instance, remoteJid) {
+  // Se já sabemos qual endpoint funciona, usa direto
+  if (_workingMsgEndpoint) {
+    try {
+      return await _tryMsgEndpoint(_workingMsgEndpoint, instance, remoteJid);
+    } catch(e) {
+      console.log('[WA] Endpoint cached falhou, resetando:', e.message);
+      _workingMsgEndpoint = null;
+    }
+  }
+
+  // Todos os endpoints conhecidos da Evolution v1/v2/v2.2
+  const strategies = [
+    // Evolution v2 — endpoint principal
+    { key: 'v2_chat_msgs', fn: () => evoProxy('/chat/findMessages/' + instance, 'POST',
+        { where: { key: { remoteJid } }, limit: 40 }) },
+    // Evolution v2 — variante com remoteJid direto no body
+    { key: 'v2_chat_msgs_flat', fn: () => evoProxy('/chat/findMessages/' + instance, 'POST',
+        { remoteJid, limit: 40 }) },
+    // Evolution v1 — messages endpoint
+    { key: 'v1_msg_find', fn: () => evoProxy('/message/findMessages/' + instance, 'POST',
+        { where: { key: { remoteJid } }, limit: 40 }) },
+    // Evolution v2.2+ — novo path
+    { key: 'v22_messages', fn: () => evoProxy('/chat/messages/' + instance + '/' + encodeURIComponent(remoteJid), 'GET') },
+    // Evolution v1 GET variant
+    { key: 'v1_msg_get', fn: () => evoProxy('/message/' + instance + '?remoteJid=' + encodeURIComponent(remoteJid) + '&limit=40', 'GET') },
+  ];
+
+  for (const s of strategies) {
+    try {
+      console.log('[WA] Tentando endpoint:', s.key);
+      const result = await s.fn();
+      const msgs = _extractMsgs(result);
+      if (msgs.length > 0) {
+        _workingMsgEndpoint = s.key;
+        console.log('[WA] ✓ Endpoint funcionou:', s.key, '→', msgs.length, 'msgs');
+        return msgs;
+      }
+      console.log('[WA] Endpoint', s.key, 'retornou vazio');
+    } catch(e) {
+      console.log('[WA] Endpoint', s.key, 'falhou:', e.message);
+    }
+  }
+  return [];
+}
+
+function _tryMsgEndpoint(key, instance, remoteJid) {
+  const map = {
+    'v2_chat_msgs':     () => evoProxy('/chat/findMessages/' + instance, 'POST', { where: { key: { remoteJid } }, limit: 40 }),
+    'v2_chat_msgs_flat':() => evoProxy('/chat/findMessages/' + instance, 'POST', { remoteJid, limit: 40 }),
+    'v1_msg_find':      () => evoProxy('/message/findMessages/' + instance, 'POST', { where: { key: { remoteJid } }, limit: 40 }),
+    'v22_messages':     () => evoProxy('/chat/messages/' + instance + '/' + encodeURIComponent(remoteJid), 'GET'),
+    'v1_msg_get':       () => evoProxy('/message/' + instance + '?remoteJid=' + encodeURIComponent(remoteJid) + '&limit=40', 'GET'),
+  };
+  if (!map[key]) throw new Error('Endpoint desconhecido: ' + key);
+  return map[key]().then(r => _extractMsgs(r));
+}
+
+function _extractMsgs(data) {
+  if (Array.isArray(data)) return data;
+  return data?.messages?.records || data?.messages || data?.data || data?.records || [];
+}
+
 async function _loadWAChatMessages(remoteJid, instance, silent=false) {
   const msgContainer = document.getElementById('waChatMessages');
   if (!msgContainer) return;
   try {
-    let data;
-    // Tenta /chat/findMessages primeiro (mais comum na Evolution v1/v2)
-    try {
-      data = await evoProxy('/chat/findMessages/' + instance, 'POST', { where:{ key:{ remoteJid } }, limit: 40 });
-    } catch {
-      // Fallback para /message/findMessages
-      data = await evoProxy('/message/findMessages/' + instance, 'POST', { where:{ key:{ remoteJid } }, limit: 40 });
-    }
-    const msgs = Array.isArray(data) ? data : (data?.messages?.records || data?.messages || data?.data || []);
-    const msgsSorted = [...msgs].sort((a,b) => {
-      const ta = a.messageTimestamp || a.timestamp || 0;
-      const tb = b.messageTimestamp || b.timestamp || 0;
-      return Number(tb) - Number(ta);
-    }).slice(0, 40).reverse();
+    const msgs = await _fetchChatMessages(instance, remoteJid);
 
-    if (!msgsSorted.length && !silent) {
-      msgContainer.innerHTML = '<div style="text-align:center;padding:20px;font-family:var(--mono);font-size:10px;color:var(--muted)">Sem mensagens encontradas.</div>';
+    if (!msgs.length && !silent) {
+      msgContainer.innerHTML = '<div style="text-align:center;padding:20px;font-family:var(--mono);font-size:10px;color:var(--muted)">Sem mensagens encontradas.<br><span style="color:var(--muted);font-size:9px">Use o botão 🔬 Diagnóstico na aba WhatsApp para verificar a API.</span></div>';
       return;
     }
-    if (!msgsSorted.length) return;
+    if (!msgs.length) return;
 
-    // Verifica se é necessário scroll para baixo (usuário está no fundo)
+    const msgsSorted = [...msgs].sort((a,b) => {
+      const ta = Number(a.messageTimestamp || a.timestamp || 0);
+      const tb = Number(b.messageTimestamp || b.timestamp || 0);
+      return ta - tb;
+    }).slice(-40);
+
     const wasAtBottom = msgContainer.scrollHeight - msgContainer.scrollTop - msgContainer.clientHeight < 60;
 
     msgContainer.innerHTML = msgsSorted.map(m => {
       const fromMe = m.key?.fromMe || m.fromMe;
       const text = m.message?.conversation || m.message?.extendedTextMessage?.text
         || m.message?.imageMessage?.caption || m.message?.videoMessage?.caption
-        || m.body || m.text || '[mídia]';
+        || m.message?.documentMessage?.title || m.body || m.text || '[mídia]';
       const ts = m.messageTimestamp || m.timestamp;
       const timeStr = ts ? new Date((Number(ts)>9999999999 ? Number(ts) : Number(ts)*1000))
         .toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}) : '';
@@ -1383,15 +1442,89 @@ async function _loadWAChatMessages(remoteJid, instance, silent=false) {
       </div>`;
     }).join('');
 
-    // Scroll para baixo se estava no fundo ou é primeiro load
-    if (!silent || wasAtBottom) {
-      msgContainer.scrollTop = msgContainer.scrollHeight;
-    }
+    if (!silent || wasAtBottom) msgContainer.scrollTop = msgContainer.scrollHeight;
   } catch(e) {
     if (!silent) {
       msgContainer.innerHTML = `<div style="text-align:center;padding:20px;font-family:var(--mono);font-size:10px;color:var(--danger)">Erro: ${e.message}</div>`;
     }
   }
+}
+
+// ── DIAGNÓSTICO DE ENDPOINTS ──────────────────────────────────────────
+async function runWADiagnostic() {
+  const btn = event?.target;
+  if (btn) { btn.textContent = '⏳ Testando...'; btn.disabled = true; }
+  const instance = config.evolutionInstance;
+  if (!instance || !config.evolutionUrl) {
+    showToast('Configure a Evolution API primeiro', 'err');
+    if (btn) { btn.textContent = '🔬 Diagnóstico'; btn.disabled = false; }
+    return;
+  }
+
+  // Pega o primeiro remoteJid disponível da lista para testar
+  const firstItem = document.querySelector('#waDashConvList .call-item');
+  const testJid = firstItem ? firstItem.getAttribute('onclick')?.match(/'([^']+@[^']+)'/)?.[1] : null;
+
+  const results = [];
+
+  // Testa endpoints de lista de chats
+  const chatEndpoints = [
+    { label: 'GET /chat/findChats', fn: () => evoProxy('/chat/findChats/' + instance) },
+    { label: 'POST /chat/findChats', fn: () => evoProxy('/chat/findChats/' + instance, 'POST', { where:{}, limit:10 }) },
+    { label: 'POST /chat/fetchChats', fn: () => evoProxy('/chat/fetchChats/' + instance, 'POST', { limit:10 }) },
+    { label: 'GET /chat/fetchChats', fn: () => evoProxy('/chat/fetchChats/' + instance) },
+  ];
+
+  for (const ep of chatEndpoints) {
+    try {
+      const d = await ep.fn();
+      const arr = Array.isArray(d) ? d : (d.chats||d.data||d.conversations||[]);
+      results.push({ label: ep.label, ok: true, info: arr.length + ' chats' });
+    } catch(e) {
+      results.push({ label: ep.label, ok: false, info: e.message.substring(0, 60) });
+    }
+  }
+
+  // Testa endpoints de mensagens se tiver JID
+  if (testJid) {
+    const msgEndpoints = [
+      { label: 'POST /chat/findMessages (where.key)', fn: () => evoProxy('/chat/findMessages/'+instance,'POST',{where:{key:{remoteJid:testJid}},limit:5}) },
+      { label: 'POST /chat/findMessages (flat)', fn: () => evoProxy('/chat/findMessages/'+instance,'POST',{remoteJid:testJid,limit:5}) },
+      { label: 'POST /message/findMessages', fn: () => evoProxy('/message/findMessages/'+instance,'POST',{where:{key:{remoteJid:testJid}},limit:5}) },
+      { label: 'GET /chat/messages/{jid}', fn: () => evoProxy('/chat/messages/'+instance+'/'+encodeURIComponent(testJid)) },
+    ];
+    for (const ep of msgEndpoints) {
+      try {
+        const d = await ep.fn();
+        const arr = _extractMsgs(d);
+        results.push({ label: ep.label, ok: arr.length>0, info: arr.length>0 ? arr.length+' msgs ✓' : 'retornou vazio' });
+      } catch(e) {
+        results.push({ label: ep.label, ok: false, info: e.message.substring(0, 60) });
+      }
+    }
+  }
+
+  // Mostra resultado no painel
+  const list = document.getElementById('waDashConvList');
+  list.innerHTML = `
+    <div style="padding:16px;font-family:var(--mono);font-size:10px">
+      <div style="color:var(--accent);margin-bottom:12px;font-size:11px;font-weight:700">🔬 RESULTADO DO DIAGNÓSTICO</div>
+      <div style="color:var(--muted);margin-bottom:10px">Instância: ${instance} · URL: ${(config.evolutionUrl||'').substring(0,40)}</div>
+      ${testJid ? `<div style="color:var(--muted);margin-bottom:14px">JID de teste: ${testJid.substring(0,30)}...</div>` : '<div style="color:var(--warn);margin-bottom:14px">⚠ Nenhum chat na lista para testar endpoints de mensagens</div>'}
+      ${results.map(r => `
+        <div style="display:flex;align-items:flex-start;gap:8px;padding:7px 0;border-bottom:1px solid var(--border)">
+          <span style="color:${r.ok?'var(--accent)':'var(--danger)'};">${r.ok?'✓':'✗'}</span>
+          <div>
+            <div style="color:${r.ok?'var(--text)':'var(--muted)'};margin-bottom:2px">${r.label}</div>
+            <div style="color:${r.ok?'var(--accent)':'var(--danger)'};font-size:9px">${r.info}</div>
+          </div>
+        </div>`).join('')}
+      <div style="margin-top:14px;display:flex;gap:8px">
+        <button onclick="checkAllChips()" style="background:rgba(0,229,160,.1);border:1px solid rgba(0,229,160,.3);color:var(--accent);padding:6px 12px;border-radius:6px;cursor:pointer;font-family:var(--mono);font-size:9px">↺ Voltar à lista</button>
+      </div>
+    </div>`;
+
+  if (btn) { btn.textContent = '🔬 Diagnóstico'; btn.disabled = false; }
 }
 
 function closeWAChat() {
