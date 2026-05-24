@@ -1109,70 +1109,93 @@ async function loadWAConversations(instanceName) {
   const list = document.getElementById('waDashConvList');
   if (!config.evolutionUrl || !config.evolutionToken) return;
   const instance = instanceName || config.evolutionInstance;
-  if (!instance) {
-    waDebugLog('⚠ Sem instância para carregar conversas.', 'var(--warn)');
-    return;
+  if (!instance) return;
+
+  // Helper: timestamp normalizado (segundos)
+  function getTs(c) {
+    const vals = [
+      c.lastMessage?.messageTimestamp, c.lastMessage?.timestamp,
+      c.updatedAt, c.lastMsgTimestamp, c.timestamp
+    ].map(v => { const n = Number(v)||0; return n > 1e12 ? n/1000 : n; });
+    return Math.max(...vals);
   }
+
+  // Helper: não lidas
+  function getUnread(c) {
+    return Number(c.unreadCount||c.unreadMessages||c.unread||c.messagesUnread||c.count?.unread||0);
+  }
+
   try {
-    // Busca os chats — tenta findChats (v1) depois fetchChats (v2)
-    let data;
+    // ── ESTRATÉGIA: busca mensagens recentes primeiro (mais confiável para ordenação) ──
+    let rawChats = [];
+
+    // Tenta 1: findMessages com sort por timestamp — retorna msgs recentes de todos os chats
     try {
-      data = await evoProxy('/chat/findChats/' + instance);
+      const msgData = await evoProxy('/message/findMessages/' + instance, 'POST', {
+        where: {},
+        limit: 100,
+        orderBy: { messageTimestamp: 'desc' }
+      });
+      const msgs = Array.isArray(msgData) ? msgData : (msgData?.messages?.records || msgData?.messages || msgData?.data || []);
+      if (msgs.length > 0) {
+        // Agrupa por remoteJid, mantém a msg mais recente de cada chat
+        const chatMap = {};
+        for (const m of msgs) {
+          const jid = m.key?.remoteJid || m.remoteJid;
+          if (!jid || jid.includes('@broadcast') || jid.includes('@newsletter')) continue;
+          if (!chatMap[jid] || (m.messageTimestamp||0) > (chatMap[jid].lastMessage?.messageTimestamp||0)) {
+            chatMap[jid] = {
+              id: jid,
+              pushName: m.pushName || m.key?.participant || '',
+              lastMessage: { messageTimestamp: m.messageTimestamp||m.timestamp, message: m.message, body: m.body },
+              unreadCount: 0,
+              _fromMsgSearch: true
+            };
+          }
+        }
+        rawChats = Object.values(chatMap);
+        console.log('[WA] Estratégia mensagens: ' + rawChats.length + ' chats extraídos de msgs');
+      }
     } catch(e1) {
-      data = await evoProxy('/chat/fetchChats/' + instance, 'POST', { where: {}, limit: 50 });
+      console.log('[WA] findMessages falhou:', e1.message);
     }
 
-    // Normaliza resposta (array direto ou wrapped)
-    const rawChats = Array.isArray(data) ? data : (data.chats || data.data || data.conversations || []);
-
-    // Função que extrai o timestamp mais confiável de um chat
-    function getTs(c) {
-      // Pega todos os campos de timestamp possíveis e usa o maior (mais recente)
-      const candidates = [
-        c.lastMessage?.messageTimestamp,
-        c.lastMessage?.timestamp,
-        c.updatedAt ? (String(c.updatedAt).length > 12 ? c.updatedAt/1000 : c.updatedAt) : 0,
-        c.lastMsgTimestamp,
-        c.timestamp,
-      ].map(v => Number(v) || 0);
-      return Math.max(...candidates);
+    // Tenta 2: findChats (v1) — se estratégia 1 falhou ou retornou vazio
+    if (!rawChats.length) {
+      try {
+        const d = await evoProxy('/chat/findChats/' + instance);
+        rawChats = Array.isArray(d) ? d : (d.chats||d.data||d.conversations||[]);
+        console.log('[WA] Estratégia findChats: ' + rawChats.length + ' chats');
+      } catch(e2) { console.log('[WA] findChats falhou:', e2.message); }
     }
 
-    // Função que extrai não lidas (testa todos os campos possíveis da Evolution)
-    function getUnread(c) {
-      return Number(c.unreadCount || c.unreadMessages || c.unread ||
-        c.messagesUnread || c.count?.unread || 0);
+    // Tenta 3: fetchChats com body (v2)
+    if (!rawChats.length) {
+      try {
+        const d = await evoProxy('/chat/fetchChats/' + instance, 'POST', {
+          where: {}, orderBy: { updatedAt: 'desc' }, limit: 50
+        });
+        rawChats = Array.isArray(d) ? d : (d.chats||d.data||d.conversations||[]);
+        console.log('[WA] Estratégia fetchChats: ' + rawChats.length + ' chats');
+      } catch(e3) { console.log('[WA] fetchChats falhou:', e3.message); }
     }
 
-    // Remove broadcasts e ordena: não lidas primeiro, depois por recência
-    const chats = rawChats
-      .filter(c => c.id && !String(c.id).includes('@broadcast') && !String(c.id).includes('@newsletter'))
-      .sort((a, b) => {
-        const ua = getUnread(a), ub = getUnread(b);
-        if (ub !== ua) return ub - ua;       // mais não lidas sobe
-        return getTs(b) - getTs(a);          // mais recente sobe
-      })
-      .slice(0, 20);
-
-    if (!chats.length) {
-      if (list) list.innerHTML = '<div class="empty-state" style="padding:16px"><div class="empty-sub">Nenhuma conversa em "' + instance + '".</div></div>';
+    if (!rawChats.length) {
+      list.innerHTML = '<div class="empty-state" style="padding:16px"><div class="empty-sub">Sem conversas em "' + instance + '".</div></div>';
       return;
     }
 
-    // Debug discreto no console (não polui o painel)
-    if (rawChats[0]) {
-      const s = rawChats[0];
-      console.log('[WA] Amostra raw:', {
-        id: s.id, unreadCount: s.unreadCount, unreadMessages: s.unreadMessages,
-        unread: s.unread, messagesUnread: s.messagesUnread,
-        updatedAt: s.updatedAt, lastMsgTimestamp: s.lastMsgTimestamp,
-        lastMessageTs: s.lastMessage?.messageTimestamp,
-        pushName: s.pushName, name: s.name
-      });
-      console.log('[WA] Top 3 após sort:', chats.slice(0,3).map(c => ({
-        id: c.id, unread: getUnread(c), ts: getTs(c), name: c.pushName || c.name
-      })));
-    }
+    // Ordena: não lidas primeiro, depois por timestamp desc
+    const chats = rawChats
+      .filter(c => c.id && !String(c.id).includes('@broadcast') && !String(c.id).includes('@newsletter'))
+      .sort((a,b) => {
+        const ud = getUnread(b) - getUnread(a);
+        if (ud !== 0) return ud;
+        return getTs(b) - getTs(a);
+      })
+      .slice(0, 20);
+
+    console.log('[WA] Top 3:', chats.slice(0,3).map(c=>({ id:c.id, ts: new Date(getTs(c)*1000).toLocaleTimeString(), unread:getUnread(c), name:c.pushName })));
 
     // Helper: converte ID @lid/@s.whatsapp.net para número legível
     function formatWAId(rawId) {
