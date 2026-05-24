@@ -1118,7 +1118,6 @@ async function loadWAConversations(instanceName) {
   const instance = instanceName || config.evolutionInstance;
   if (!instance) return;
 
-  // Helper: timestamp normalizado (segundos)
   function getTs(c) {
     const vals = [
       c.lastMessage?.messageTimestamp, c.lastMessage?.timestamp,
@@ -1127,183 +1126,106 @@ async function loadWAConversations(instanceName) {
     return Math.max(...vals);
   }
 
-  // Helper: não lidas
   function getUnread(c) {
     return Number(c.unreadCount||c.unreadMessages||c.unread||c.messagesUnread||c.count?.unread||0);
   }
 
-  // Log visível na tela
-  function vlog(msg, color='var(--muted)') {
-    if (!list) return;
-    let log = list.querySelector('.wa-debug-log');
-    if (!log) {
-      list.innerHTML = '<div class="wa-debug-log" style="padding:12px 18px;font-family:var(--mono);font-size:10px;line-height:2.2"></div>';
-      log = list.querySelector('.wa-debug-log');
-    }
-    const line = document.createElement('div');
-    line.style.color = color;
-    line.textContent = '▸ ' + msg;
-    log.appendChild(line);
-    log.scrollTop = log.scrollHeight;
+  function extractMsgText(lm) {
+    if (!lm) return '';
+    const m = lm.message || lm;
+    return m?.conversation || m?.extendedTextMessage?.text
+      || m?.imageMessage?.caption || m?.videoMessage?.caption
+      || m?.documentMessage?.title || lm?.body || lm?.text || lm?.content || '';
   }
 
-  // Inicializa log
-  if (list) list.innerHTML = '<div class="wa-debug-log" style="padding:12px 18px;font-family:var(--mono);font-size:10px;line-height:2.2"></div>';
-  vlog('Instância: ' + instance, 'var(--accent)');
-  vlog('URL: ' + (config.evolutionUrl||'').replace(/\/+$/,''), 'var(--accent)');
+  function formatPhone(rawId) {
+    if (!rawId) return '';
+    let id = String(rawId).replace(/@s\.whatsapp\.net/,'').replace(/@lid/,'')
+      .replace(/@g\.us.*/,'').replace(/:.*$/,'').trim();
+    if (rawId.includes('@g.us')) return '\uD83D\uDC65 Grupo';
+    if (/^\d{12,13}$/.test(id) && id.startsWith('55')) {
+      const ddd = id.slice(2,4), num = id.slice(4);
+      return '+55 (' + ddd + ') ' + (num.length>=9 ? num.slice(0,5)+'-'+num.slice(5) : num.slice(0,4)+'-'+num.slice(4));
+    }
+    return id;
+  }
 
   try {
-    let rawChats = [];
+    // Busca chats — endpoint confirmado: GET /chat/findChats
+    const raw = await evoProxy('/chat/findChats/' + instance, 'GET');
 
-    // CONFIRMADO: GET /chat/findChats é o endpoint correto desta Evolution
-    try {
-      const d = await evoProxy('/chat/findChats/' + instance, 'GET');
-      let arr = Array.isArray(d) ? d : (d.chats || d.data || d.conversations || d.records || []);
-      if (!Array.isArray(arr) && typeof arr === 'object') arr = Object.values(arr);
-      vlog('GET /chat/findChats → ' + arr.length + ' chats', arr.length ? 'var(--accent)' : 'var(--warn)');
-      if (arr.length) rawChats = arr;
-      else vlog('Resposta: ' + JSON.stringify(d).substring(0, 200), 'var(--warn)');
-    } catch(e1) {
-      vlog('GET /chat/findChats falhou: ' + e1.message.substring(0, 100), 'var(--danger)');
-    }
+    // Normaliza resposta (array direto ou wrapped)
+    let all = Array.isArray(raw) ? raw
+      : Array.isArray(raw?.chats) ? raw.chats
+      : Array.isArray(raw?.data) ? raw.data
+      : Array.isArray(raw?.conversations) ? raw.conversations
+      : Array.isArray(raw?.records) ? raw.records
+      : typeof raw === 'object' && raw !== null ? Object.values(raw).find(v => Array.isArray(v)) || []
+      : [];
 
-    if (!rawChats.length) {
-      vlog('⚠ Nenhum chat retornado — verifique se a instância tem conversas.', 'var(--warn)');
+    // Garante que cada item tenha campo 'id'
+    all = all.map(c => ({ ...c, id: c.id || c.remoteJid || c.jid || '' }))
+             .filter(c => c.id && !c.id.includes('@broadcast') && !c.id.includes('@newsletter'));
+
+    if (!all.length) {
+      list.innerHTML = '<div style="text-align:center;padding:20px;color:var(--muted);font-family:var(--mono);font-size:10px">Nenhuma conversa em "' + instance + '".</div>';
       return;
     }
 
-    vlog('✓ ' + rawChats.length + ' chats brutos carregados', 'var(--accent)');
+    // Ordena por não lidas + recência, pega top 20
+    const chats = all.sort((a,b) => {
+      const ud = getUnread(b) - getUnread(a);
+      return ud !== 0 ? ud : getTs(b) - getTs(a);
+    }).slice(0, 20);
 
-    // Log estrutura do primeiro chat para debug
-    if (rawChats[0]) {
-      vlog('Estrutura chat[0]: ' + JSON.stringify(rawChats[0]).substring(0, 200), 'var(--ms)');
-    }
+    const instColors = ['135deg,#0066ff,#00b4d8','135deg,#7c3aed,#0066ff','135deg,#00e5a0,#0066ff'];
+    const avatarGradient = instColors[0];
 
-    // Ordena: não lidas primeiro, depois por timestamp desc
-    // Aceita qualquer campo de ID (id, remoteJid, jid)
-    const chats = rawChats
-      .map(c => ({ ...c, id: c.id || c.remoteJid || c.jid || '' }))
-      .filter(c => c.id && !String(c.id).includes('@broadcast') && !String(c.id).includes('@newsletter'))
-      .sort((a,b) => {
-        const ud = getUnread(b) - getUnread(a);
-        if (ud !== 0) return ud;
-        return getTs(b) - getTs(a);
-      })
-      .slice(0, 20);
-
-    vlog('Após filtro/sort: ' + chats.length + ' chats para exibir', chats.length ? 'var(--accent)' : 'var(--danger)');
-
-    console.log('[WA] Top 3:', chats.slice(0,3).map(c=>({ id:c.id, ts: new Date(getTs(c)*1000).toLocaleTimeString(), unread:getUnread(c), name:c.pushName })));
-
-    // Helper: converte ID @lid/@s.whatsapp.net para número legível
-    function formatWAId(rawId) {
-      if (!rawId) return '';
-      let id = String(rawId)
-        .replace('@s.whatsapp.net','')
-        .replace('@lid','')
-        .replace(/@g\.us.*/,'')
-        .replace(/:.*$/,'')   // remove sufixo de device :0, :1 etc
-        .trim();
-      if (id.includes('@g.us') || rawId.includes('@g.us')) return '👥 Grupo';
-      // Números com 10–15 dígitos: formata como BR
-      if (/^\d{10,15}$/.test(id)) {
-        // Normaliza: se começa com 55 e tem dígito 9 extra no cel (13 dígitos), remove o 9
-        if (id.length === 13 && id.startsWith('55')) {
-          const ddd = id.slice(2,4);
-          const num = id.slice(4);
-          // se 9 dígitos e começa com 9, remove o primeiro 9
-          const numFmt = num.length === 9 ? num.slice(0,5) + '-' + num.slice(5) : num.slice(0,4) + '-' + num.slice(4);
-          return '+55 (' + ddd + ') ' + numFmt;
-        }
-        if (id.length === 12 && id.startsWith('55')) {
-          const ddd = id.slice(2,4);
-          const num = id.slice(4);
-          return '+55 (' + ddd + ') ' + num.slice(0,4) + '-' + num.slice(4);
-        }
-        // Outro formato: mostra como está
-        return id;
-      }
-      return id;
-    }
-
-    // Cores por instância para diferenciar visualmente qual SDR
-    const instColors = ['135deg,#0066ff,#00b4d8','135deg,#7c3aed,#0066ff','135deg,#00e5a0,#0066ff','135deg,#ff6b35,#ff2d55','135deg,#ff2d55,#7c3aed'];
-    const instColorMap = {};
-    let colorIdx = 0;
-    function instColor(name) {
-      if (!instColorMap[name]) { instColorMap[name] = instColors[colorIdx++ % instColors.length]; }
-      return instColorMap[name];
-    }
-
-    if (list) list.innerHTML = chats.map(c => {
-      // Nome: prioriza pushName, nome salvo, número formatado
-      const rawId = c.id || c.remoteJid || '';
-      const rawNum = formatWAId(rawId);
-      const displayName = c.pushName || c.name || c.verifiedName || rawNum || 'Desconhecido';
-      // Número sempre visível separado do nome
-      const phoneDisplay = (rawNum && rawNum !== displayName) ? rawNum : '';
-
-      const initials = displayName.replace(/[^a-zA-Z0-9À-ž]/g,' ')
-        .trim().split(/\s+/).filter(Boolean)
-        .map(w=>w[0]).join('').substring(0,2).toUpperCase() || '?';
-
-      // Mensagem: percorre todos os campos possíveis da Evolution v1/v2
-      function extractMsgText(lm) {
-        if (!lm) return '';
-        const m = lm.message || lm;
-        return m?.conversation
-          || m?.extendedTextMessage?.text
-          || m?.imageMessage?.caption
-          || m?.videoMessage?.caption
-          || m?.documentMessage?.title
-          || m?.buttonsResponseMessage?.selectedDisplayText
-          || m?.listResponseMessage?.title
-          || m?.templateButtonReplyMessage?.selectedDisplayText
-          || m?.audioMessage && '🎵 Áudio'
-          || m?.stickerMessage && '🎭 Sticker'
-          || m?.locationMessage && '📍 Localização'
-          || lm?.body || lm?.text || lm?.content || '';
-      }
-      const msg = extractMsgText(c.lastMessage) || c.preview || c.snippet || '';
-      const lastMsg = msg ? (msg.length > 55 ? msg.substring(0,55)+'…' : msg) : '';
-
+    list.innerHTML = chats.map(c => {
+      const rawId = c.id;
+      const phone = formatPhone(rawId);
+      const name = c.pushName || c.name || c.verifiedName || phone || 'Desconhecido';
+      const phoneLabel = (phone && phone !== name) ? phone : '';
+      const initials = name.replace(/[^a-zA-Z0-9\u00C0-\u024F]/g,' ').trim()
+        .split(/\s+/).filter(Boolean).map(w=>w[0]).join('').substring(0,2).toUpperCase() || '?';
+      const lastMsg = extractMsgText(c.lastMessage) || c.preview || c.snippet || '';
+      const lastMsgShort = lastMsg.length > 55 ? lastMsg.substring(0,55)+'\u2026' : lastMsg;
       const ts = getTs(c);
-      const now = Date.now() / 1000;
       let time = '';
       if (ts) {
-        const d = new Date(ts * 1000);
-        const isToday = (now - ts) < 86400;
-        time = isToday
-          ? d.toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'})
-          : d.toLocaleDateString('pt-BR', {day:'2-digit', month:'2-digit'});
+        const d = new Date(ts * 1000), now = Date.now()/1000;
+        time = (now - ts) < 86400
+          ? d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})
+          : d.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'});
       }
-
       const unread = getUnread(c);
-      const isGroup = rawId.includes('@g.us') || rawId.includes('(grupo)');
-      const avatarGradient = instColor(instance);
+      const isGroup = rawId.includes('@g.us');
+      const safeName = name.replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'&quot;');
+      const safeId = rawId.replace(/'/g,'%27');
 
-      return `<div class="call-item" style="padding:12px 18px;cursor:pointer" onclick="openWAChat('${rawId}','${instance}','${displayName.replace(/'/g,"\'")}')">
-        <div class="call-avatar" style="background:linear-gradient(${avatarGradient});position:relative">
-          ${initials}
-          ${unread>0?`<span style="position:absolute;top:-4px;right:-4px;background:var(--danger);color:#fff;border-radius:50%;width:16px;height:16px;font-size:9px;display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-weight:700">${unread>9?'9+':unread}</span>`:''}
+      return `<div class="call-item" style="padding:12px 18px;cursor:pointer" onclick="openWAChat('\${safeId}','\${instance}','\${safeName}')">
+        <div class="call-avatar" style="background:linear-gradient(\${avatarGradient});position:relative;flex-shrink:0">
+          \${initials}
+          \${unread>0?'<span style="position:absolute;top:-4px;right:-4px;background:var(--danger);color:#fff;border-radius:50%;width:16px;height:16px;font-size:9px;display:flex;align-items:center;justify-content:center;font-weight:700">'+Math.min(unread,9)+'</span>':''}
         </div>
         <div class="call-info" style="min-width:0;flex:1">
           <div class="call-top" style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
             <div style="min-width:0">
-              <div class="call-name" style="font-size:12px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${displayName}${isGroup?' 👥':''}</div>
-              ${phoneDisplay?`<div style="font-family:var(--mono);font-size:10px;color:var(--accent);letter-spacing:.5px">${phoneDisplay}</div>`:''}
+              <div class="call-name" style="font-size:12px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">\${name}\${isGroup?' \uD83D\uDC65':''}</div>
+              \${phoneLabel?'<div style="font-family:var(--mono);font-size:10px;color:var(--accent)">'+phoneLabel+'</div>':''}
             </div>
             <div style="flex-shrink:0;text-align:right">
-              <div class="call-time">${time}</div>
-              <div style="font-family:var(--mono);font-size:9px;color:var(--muted);margin-top:2px;white-space:nowrap">📱 ${instance}</div>
+              <div class="call-time">\${time}</div>
+              <div style="font-family:var(--mono);font-size:9px;color:var(--muted);margin-top:2px">\uD83D\uDCF1 \${instance}</div>
             </div>
           </div>
-          <div class="call-meta" style="margin-top:4px;font-size:11px;color:${unread>0?'var(--text)':'var(--muted)'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:${unread>0?'600':'400'}">${lastMsg}</div>
+          <div class="call-meta" style="margin-top:4px;font-size:11px;color:\${unread>0?'var(--text)':'var(--muted)'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:\${unread>0?'600':'400'}">\${lastMsgShort}</div>
         </div>
       </div>`;
     }).join('');
+
   } catch(e) {
-    waDebugLog('❌ Erro ao renderizar conversas: ' + e.message, 'var(--danger)');
+    list.innerHTML = '<div style="text-align:center;padding:20px;color:var(--danger);font-family:var(--mono);font-size:10px">Erro: ' + e.message + '</div>';
     console.error('[loadWAConversations]', e);
   }
 }
