@@ -772,21 +772,58 @@ const GFB_PIPELINES = [
 // Resolve CORS e HTTP 401 causados por bloqueio de origem
 // ====================================================================
 async function callProxy(service, payload, token, apiKey) {
-  const proxyUrl = '/api/proxy';
-  const res = await fetch(proxyUrl, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ service, payload, token, apiKey })
-  });
+  // Se proxy Vercel configurado, usa ele. Senão, chama direto.
+  const proxyUrl = (config.serverUrl || '').replace(/\/$/, '') + '/api/proxy';
+  const hasProxy = !!config.serverUrl;
 
-  // Retorna dados mesmo em erro para permitir log detalhado
-  const data = await res.json().catch(() => ({ error: 'Resposta inválida do proxy' }));
-
-  if (!res.ok) {
-    const msg = data?.error?.message || data?.error || data?.message || `HTTP ${res.status}`;
-    throw new Error(msg);
+  if (hasProxy) {
+    try {
+      const res = await fetch(proxyUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ service, payload, token, apiKey })
+      });
+      const data = await res.json().catch(() => ({ error: 'Resposta inválida do proxy' }));
+      if (!res.ok) {
+        const msg = data?.error?.message || data?.error || data?.message || `HTTP ${res.status}`;
+        throw new Error(msg);
+      }
+      return data;
+    } catch(e) {
+      if (!e.message.includes('fetch')) throw e;
+      // fallthrough para chamada direta
+    }
   }
-  return data;
+
+  // Chamada direta sem proxy
+  if (service === 'claude') {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey || config.claudeApiKey,
+        'anthropic-version': '2023-06-01'
+      },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json().catch(() => ({ error: 'Resposta inválida' }));
+    if (!res.ok) throw new Error(data?.error?.message || `HTTP ${res.status}`);
+    return data;
+  }
+
+  if (service === 'rd') {
+    const url = `https://crm.rdstation.com/api/v1/${payload.path || ''}`;
+    const res = await fetch(url, {
+      method: payload.method || 'GET',
+      headers: { 'Content-Type': 'application/json', 'Authorization': token || config.rdApiToken },
+      body: payload.body ? JSON.stringify(payload.body) : undefined
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data?.message || `HTTP ${res.status}`);
+    return data;
+  }
+
+  throw new Error(`Serviço desconhecido: ${service}`);
 }
 
 // ====================================================================
@@ -925,24 +962,43 @@ function evoHeaders() {
   return { 'Content-Type': 'application/json', 'apikey': config.evolutionToken };
 }
 
-// Wrapper para chamadas Evolution com fallback CORS
+// Wrapper para chamadas Evolution API — direto com headers CORS
 async function evoFetch(path, options = {}) {
-  const url = config.evolutionUrl.replace(/\/$/, '') + path;
-  const headers = evoHeaders();
-  
-  // Tenta direto primeiro
+  const base = (config.evolutionUrl || '').replace(/\/$/, '');
+  if (!base) throw new Error('URL da Evolution não configurada');
+  const url = base + path;
+  const headers = {
+    'Content-Type': 'application/json',
+    'apikey': config.evolutionToken
+  };
+
+  // Tentativa 1: chamada direta
   try {
-    const res = await fetch(url, { ...options, headers: { ...headers, ...(options.headers||{}) } });
-    return res;
-  } catch(e) {
-    // Se falhar por CORS, tenta via proxy público (allorigins)
-    const proxied = 'https://api.allorigins.win/raw?url=' + encodeURIComponent(url);
-    const res = await fetch(proxied, {
+    const res = await fetch(url, {
       method: options.method || 'GET',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: options.body
     });
     return res;
+  } catch(e1) {
+    // Tentativa 2: allorigins (contorna CORS)
+    try {
+      const proxyUrl = 'https://api.allorigins.win/raw?url=' + encodeURIComponent(url);
+      const res = await fetch(proxyUrl, {
+        method: 'GET', // allorigins só suporta GET
+        headers: { 'Content-Type': 'application/json' }
+      });
+      return res;
+    } catch(e2) {
+      // Tentativa 3: corsproxy.io
+      const proxy2 = 'https://corsproxy.io/?' + encodeURIComponent(url);
+      const res = await fetch(proxy2, {
+        method: options.method || 'GET',
+        headers: { 'Content-Type': 'application/json', 'x-requested-with': 'XMLHttpRequest' },
+        body: options.body
+      });
+      return res;
+    }
   }
 }
 
