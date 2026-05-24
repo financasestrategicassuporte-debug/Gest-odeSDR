@@ -2,7 +2,7 @@ cd /home/claude && python3 << 'PYEOF'
 with open('sdr_base.html', 'r', encoding='utf-8') as f:
     content = f.read()
 
-# Substituir o painel WhatsApp no HTML — adicionar os elementos que faltam
+# 1. Substituir o painel WhatsApp no HTML
 old_wa_html = '''          <div class="panel">
           <div class="panel-header">
             <div class="panel-title">WhatsApp — Ao Vivo</div>
@@ -48,7 +48,7 @@ new_wa_html = '''          <div class="panel">
 
 content = content.replace(old_wa_html, new_wa_html)
 
-# Agora substituir TODO o bloco JS de Evolution + WhatsApp ao vivo pelo código correto
+# 2. Inserir a nova seção JS com tratamento robusto de erros e logs no console
 old_evo_section = '''// ====================================================================
 // EVOLUTION — chamada direta
 // ====================================================================
@@ -190,6 +190,9 @@ async function evoFetch(path, options = {}) {
   const base = (config.evolutionUrl || '').replace(/\/$/, '');
   if (!base) throw new Error('URL da Evolution não configurada');
   if (!config.evolutionToken) throw new Error('API Key da Evolution não configurada');
+  
+  console.log('[EvoFetch] Chamando proxy para:', path, 'Payload:', options.body);
+  
   const res = await fetch('/api/proxy', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -219,6 +222,7 @@ async function _testEvolution(resultEl) {
       resultEl.textContent = '✓ Evolution conectada! Instâncias: ' + count;
     } else throw new Error('HTTP ' + res.status + ' — ' + JSON.stringify(data).substring(0,60));
   } catch(e) {
+    console.error('[Evolution Test Error]:', e);
     setStatus('evolutionStatus', false);
     resultEl.style.color = 'var(--danger)';
     resultEl.textContent = '✗ ' + e.message;
@@ -260,10 +264,16 @@ async function checkAllChips() {
   try {
     const res = await evoFetch('/instance/fetchInstances');
     const raw = await res.json();
+    
+    console.log('[CheckAllChips] Resposta bruta da Evolution:', raw);
+    
     const instances = Array.isArray(raw) ? raw : (raw?.data || []);
     availableInstances = instances;
+    
     if (!instances.length) {
+      console.warn('[CheckAllChips] Nenhuma instância retornada ou formato inválido.');
       if (chipStatus) { chipStatus.textContent = 'SEM INSTÂNCIA'; }
+      if (chipFilterEl) chipFilterEl.innerHTML = '<option value="">Nenhum chip ativo</option>';
       return;
     }
     // Preenche select de chips
@@ -306,6 +316,7 @@ async function checkAllChips() {
     renderSDRMappingList();
     await loadWAConversations();
   } catch(e) {
+    console.error('[CheckAllChips CRITICAL ERROR]:', e);
     if (chipStatus) { chipStatus.textContent = 'ERRO: ' + e.message.substring(0,30); }
   }
 }
@@ -392,28 +403,12 @@ async function checkWAStatus() {
 
 content = content.replace(old_evo_section, new_evo_section)
 
-# Verificar replacements
-ok1 = 'waSDRFilter' in content
-ok2 = 'waChipFilter' in content
-ok3 = 'waChipStatusRow' in content
-ok4 = "service: 'evolution'" in content
-ok5 = 'evoFetch' in content
-ok6 = old_evo_section not in content
-
-print(f'{"✓" if ok1 else "✗"} waSDRFilter no HTML+JS')
-print(f'{"✓" if ok2 else "✗"} waChipFilter no HTML+JS')
-print(f'{"✓" if ok3 else "✗"} waChipStatusRow no HTML+JS')
-print(f'{"✓" if ok4 else "✗"} proxy evolution')
-print(f'{"✓" if ok5 else "✗"} evoFetch')
-print(f'{"✓" if ok6 else "✗"} código antigo removido')
-print(f'Total: {len(content)} chars')
-
 with open('sdr_final_v5.html', 'w', encoding='utf-8') as f:
     f.write(content)
+print("Arquivo atualizado com logs de debug!")
 PYEOF
 
-# ---- COMANDOS DO GITHUB ----
-# Garante que estamos na branch correta, adiciona a alteração, commita e envia.
+# Rodar comandos do Git para atualizar o repositório
 git add sdr_final_v5.html
-git commit -m "feat: atualiza sdr_final_v5 com filtros sdr/chip e evoFetch via proxy"
+git commit -m "debug: adiciona console logs no fetch da evolution via proxy vercel"
 git push origin main
