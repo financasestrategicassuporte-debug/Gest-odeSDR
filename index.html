@@ -1,2338 +1,270 @@
-<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SDR Command Center v2</title>
-<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
-<style>
-  :root {
-    --bg:#080c10;--surface:#0d1117;--surface2:#131920;--border:#1e2a35;
-    --accent:#00e5a0;--accent2:#0066ff;--warn:#ff6b35;--danger:#ff2d55;
-    --ms:#00b4d8;--text:#e8f0f7;--muted:#4a6070;
-    --mono:'Space Mono',monospace;--sans:'Syne',sans-serif;
-  }
-  *{margin:0;padding:0;box-sizing:border-box}
-  body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:100vh;overflow-x:hidden}
-  body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(rgba(0,229,160,.03)1px,transparent 1px),linear-gradient(90deg,rgba(0,229,160,.03)1px,transparent 1px);background-size:40px 40px;pointer-events:none;z-index:0}
-  .app{position:relative;z-index:1}
-  header{display:flex;align-items:center;justify-content:space-between;padding:16px 28px;border-bottom:1px solid var(--border);background:rgba(8,12,16,.97);backdrop-filter:blur(10px);position:sticky;top:0;z-index:100}
-  .logo{display:flex;align-items:center;gap:10px}
-  .logo-icon{width:32px;height:32px;background:var(--accent);clip-path:polygon(50% 0%,100% 25%,100% 75%,50% 100%,0% 75%,0% 25%);animation:pulseGlow 3s ease-in-out infinite}
-  @keyframes pulseGlow{0%,100%{box-shadow:0 0 20px rgba(0,229,160,.3)}50%{box-shadow:0 0 40px rgba(0,229,160,.6)}}
-  .logo-text{font-size:17px;font-weight:800;letter-spacing:-.5px}.logo-text span{color:var(--accent)}
-  .header-right{display:flex;align-items:center;gap:12px}
-  .status-dot{width:7px;height:7px;border-radius:50%;background:var(--accent);animation:blink 2s ease-in-out infinite}
-  @keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
-  .status-text{font-family:var(--mono);font-size:10px;color:var(--accent);letter-spacing:1px}
-  .btn-cfg{background:transparent;border:1px solid var(--border);color:var(--muted);padding:7px 14px;border-radius:6px;font-family:var(--mono);font-size:10px;cursor:pointer;letter-spacing:1px;transition:all .2s}
-  .btn-cfg:hover{border-color:var(--accent);color:var(--accent)}
-  .main{display:grid;grid-template-columns:260px 1fr;min-height:calc(100vh - 65px)}
-  .sidebar{border-right:1px solid var(--border);padding:20px 0;background:var(--surface);overflow-y:auto;max-height:calc(100vh - 65px)}
-  .sidebar-section{padding:0 16px;margin-bottom:28px}
-  .sidebar-label{font-family:var(--mono);font-size:9px;letter-spacing:2px;color:var(--muted);margin-bottom:10px;text-transform:uppercase}
-  .nav-item{display:flex;align-items:center;gap:9px;padding:9px 10px;border-radius:8px;cursor:pointer;transition:all .2s;margin-bottom:3px;font-size:13px;font-weight:600;color:var(--muted);border:1px solid transparent}
-  .nav-item:hover{background:var(--surface2);color:var(--text)}.nav-item.active{background:rgba(0,229,160,.08);color:var(--accent);border-color:rgba(0,229,160,.2)}
-  .nav-icon{font-size:14px}
-  .sdr-card{background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:8px;cursor:pointer;transition:all .2s}
-  .sdr-card:hover,.sdr-card.active{border-color:var(--accent)}.sdr-card.active{background:rgba(0,229,160,.04)}
-  .sdr-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
-  .sdr-name{font-size:12px;font-weight:700}
-  .sdr-score{font-family:var(--mono);font-size:11px;padding:2px 7px;border-radius:4px;font-weight:700}
-  .score-high{background:rgba(0,229,160,.15);color:var(--accent)}.score-med{background:rgba(255,107,53,.15);color:var(--warn)}
-  .sdr-stats{display:flex;gap:10px}.sdr-stat{font-family:var(--mono);font-size:9px;color:var(--muted)}.sdr-stat span{color:var(--text)}
-  .sdr-status{display:flex;align-items:center;gap:6px;margin-top:6px}
-  .status-indicator{width:6px;height:6px;border-radius:50%}
-  .online{background:var(--accent);animation:blink 2s infinite}.busy{background:var(--warn);animation:blink 1s infinite}
-  .status-label{font-size:10px;color:var(--muted)}
-  .content{padding:24px 28px;overflow-y:auto;max-height:calc(100vh - 65px)}
-  .tab-content{display:none}.tab-content.active{display:block}
-  .tabs{display:flex;gap:3px;margin-bottom:24px;border-bottom:1px solid var(--border)}
-  .tab{padding:9px 18px;font-size:12px;font-weight:700;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;transition:all .2s}
-  .tab:hover{color:var(--text)}.tab.active{color:var(--accent);border-bottom-color:var(--accent)}
-  .stats-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:24px}
-  .stat-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:18px;position:relative;overflow:hidden;transition:border-color .2s}
-  .stat-card:hover{border-color:rgba(0,229,160,.3)}
-  .stat-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,var(--accent),transparent)}
-  .stat-label{font-family:var(--mono);font-size:9px;letter-spacing:2px;color:var(--muted);text-transform:uppercase;margin-bottom:8px}
-  .stat-value{font-size:30px;font-weight:800;line-height:1;margin-bottom:5px}
-  .stat-delta{font-family:var(--mono);font-size:10px}.delta-up{color:var(--accent)}.delta-down{color:var(--danger)}
-  .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:18px}
-  .panel{background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:18px}
-  .panel-header{padding:14px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
-  .panel-title{font-size:12px;font-weight:700;letter-spacing:.5px}
-  .panel-badge{font-family:var(--mono);font-size:9px;padding:3px 8px;border-radius:4px;background:rgba(0,229,160,.1);color:var(--accent);letter-spacing:1px}
-  .panel-badge.ms{background:rgba(0,180,216,.1);color:var(--ms)}
-  .panel-body{padding:18px}
-  .form-group{margin-bottom:14px}
-  .form-label{font-family:var(--mono);font-size:10px;letter-spacing:1px;color:var(--muted);margin-bottom:6px;display:block;text-transform:uppercase}
-  .form-input,.form-textarea,.form-select{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-family:var(--mono);font-size:11px;outline:none;transition:border-color .2s;resize:vertical}
-  .form-input:focus,.form-textarea:focus,.form-select:focus{border-color:var(--accent)}
-  .form-textarea{min-height:76px}.form-select option{background:var(--surface)}
-  .btn-primary{background:var(--accent);color:var(--bg);border:none;padding:9px 18px;border-radius:8px;font-family:var(--sans);font-size:12px;font-weight:700;cursor:pointer;transition:all .2s}
-  .btn-primary:hover{opacity:.9;transform:translateY(-1px)}.btn-primary:disabled{opacity:.4;cursor:not-allowed;transform:none}
-  .btn-secondary{background:transparent;border:1px solid var(--border);color:var(--muted);padding:9px 18px;border-radius:8px;font-family:var(--sans);font-size:12px;font-weight:600;cursor:pointer;transition:all .2s}
-  .btn-secondary:hover{border-color:var(--muted);color:var(--text)}
-  .btn-ms{background:rgba(0,180,216,.1);border:1px solid rgba(0,180,216,.3);color:var(--ms);padding:7px 14px;border-radius:6px;font-family:var(--mono);font-size:10px;cursor:pointer;transition:all .2s}
-  .btn-ms:hover{background:rgba(0,180,216,.2)}
-  .btn-danger{background:rgba(255,45,85,.1);border:1px solid rgba(255,45,85,.3);color:var(--danger);padding:5px 10px;border-radius:6px;font-family:var(--mono);font-size:10px;cursor:pointer;transition:all .2s}
-  .btn-sm{padding:6px 11px;font-size:10px}
-  .int-block{border-bottom:1px solid var(--border)}.int-block:last-child{border-bottom:none}
-  .int-block-header{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;cursor:pointer;transition:background .2s}
-  .int-block-header:hover{background:rgba(0,229,160,.02)}
-  .int-chevron{font-size:11px;color:var(--muted);transition:transform .2s;user-select:none}
-  .int-chevron.open{transform:rotate(90deg);color:var(--accent)}
-  .int-block-body{padding:0 18px 18px;border-top:1px solid var(--border);background:rgba(0,0,0,.2)}
-  .int-block-body .form-group:first-child{margin-top:14px}
-  .integration-name{font-size:13px;font-weight:700;margin-bottom:3px}
-  .integration-desc{font-size:11px;color:var(--muted)}
-  .integration-status{font-family:var(--mono);font-size:9px;padding:3px 9px;border-radius:4px;font-weight:700;white-space:nowrap}
-  .connected{background:rgba(0,229,160,.1);color:var(--accent)}.disconnected{background:rgba(255,45,85,.1);color:var(--danger)}
-  .analysis-card{background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:10px}
-  .analysis-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px}
-  .analysis-name{font-size:13px;font-weight:700}.analysis-time{font-family:var(--mono);font-size:9px;color:var(--muted)}
-  .score-bar-wrap{margin-bottom:8px}
-  .score-bar-label{display:flex;justify-content:space-between;font-size:10px;color:var(--muted);margin-bottom:3px;font-family:var(--mono)}
-  .score-bar{height:3px;background:var(--border);border-radius:2px;overflow:hidden}
-  .score-fill{height:100%;border-radius:2px;transition:width 1s ease}
-  .fill-green{background:var(--accent)}.fill-orange{background:var(--warn)}.fill-blue{background:var(--accent2)}
-  .call-item{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--border);transition:all .2s}
-  .call-item:last-child{border-bottom:none}
-  .call-avatar{width:34px;height:34px;border-radius:8px;background:linear-gradient(135deg,var(--ms),var(--accent2));display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12px;flex-shrink:0}
-  .call-info{flex:1;min-width:0}
-  .call-top{display:flex;justify-content:space-between;margin-bottom:3px}
-  .call-name{font-size:12px;font-weight:700}.call-time{font-family:var(--mono);font-size:9px;color:var(--muted)}
-  .call-meta{font-size:11px;color:var(--muted)}
-  .call-tags{display:flex;gap:5px;margin-top:4px;flex-wrap:wrap}
-  .tag{font-size:9px;padding:2px 6px;border-radius:4px;font-family:var(--mono)}
-  .tag-ok{background:rgba(0,229,160,.1);color:var(--accent)}.tag-warn{background:rgba(255,107,53,.15);color:var(--warn)}
-  .tag-ms{background:rgba(0,180,216,.1);color:var(--ms)}
-  .upload-zone{border:2px dashed var(--border);border-radius:12px;padding:28px;text-align:center;cursor:pointer;transition:all .3s}
-  .upload-zone:hover,.upload-zone.dragging{border-color:var(--accent);background:rgba(0,229,160,.02)}
-  .processing-state{display:none;text-align:center;padding:22px}.processing-state.active{display:block}
-  .spinner{width:38px;height:38px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 14px}
-  @keyframes spin{to{transform:rotate(360deg)}}
-  .processing-log{font-family:var(--mono);font-size:10px;color:var(--accent);margin-top:10px;text-align:left;background:var(--bg);border-radius:8px;padding:10px 14px;max-height:110px;overflow-y:auto}
-  .log-line{margin-bottom:3px}.log-line::before{content:'> ';opacity:.5}
-  .result-card{display:none;background:var(--surface2);border:1px solid rgba(0,229,160,.2);border-radius:12px;padding:18px;margin-top:14px}
-  .result-card.active{display:block}
-  .result-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
-  .result-score{font-size:26px;font-weight:800;color:var(--accent);font-family:var(--mono)}
-  .result-content{font-size:12px;line-height:1.7;color:var(--muted);white-space:pre-wrap}.result-content strong{color:var(--text)}
-  .webhook-box{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px 14px;font-family:var(--mono);font-size:10px;color:var(--accent);word-break:break-all;cursor:pointer;position:relative;margin-top:6px}
-  .webhook-box::after{content:'COPIAR';position:absolute;right:10px;top:50%;transform:translateY(-50%);font-size:8px;color:var(--muted);letter-spacing:1px}
-  .webhook-box:hover::after{color:var(--accent)}
-  .flow-builder{background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden}
-  .flow-header{padding:14px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
-  .flow-list{padding:14px 18px}
-  .flow-item{background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:10px;cursor:pointer;transition:all .2s}
-  .flow-item:hover{border-color:rgba(0,229,160,.3)}.flow-item.active-flow{border-color:var(--accent);background:rgba(0,229,160,.04)}
-  .flow-item-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
-  .flow-name{font-size:13px;font-weight:700}
-  .flow-trigger{display:inline-flex;align-items:center;gap:5px;font-size:10px;padding:3px 9px;border-radius:20px;background:rgba(0,102,255,.1);color:#4d9fff;font-family:var(--mono)}
-  .flow-steps-preview{display:flex;align-items:center;gap:3px;margin-top:8px;flex-wrap:wrap}
-  .flow-step-dot{width:7px;height:7px;border-radius:50%;background:var(--border)}
-  .flow-step-dot.msg{background:var(--accent)}.flow-step-dot.wait{background:var(--warn)}
-  .flow-step-dot.condition{background:var(--accent2)}.flow-step-dot.action{background:#7c3aed}
-  .step-arrow{color:var(--muted);font-size:9px}
-  .flow-editor{position:fixed;inset:0;z-index:300;background:rgba(8,12,16,.97);backdrop-filter:blur(8px);display:none;flex-direction:column}
-  .flow-editor.active{display:flex}
-  /* flow-editor legacy removed */
-  .flow-steps-panel{border-right:1px solid var(--border);padding:18px;overflow-y:auto;background:var(--surface)}
-  .flow-canvas{flex:1;padding:22px;overflow-y:auto}
-  .step-card{background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:9px}
-  .step-card-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:9px}
-  .step-type-badge{font-family:var(--mono);font-size:9px;padding:3px 7px;border-radius:4px;letter-spacing:1px}
-  .type-msg{background:rgba(0,229,160,.1);color:var(--accent)}.type-wait{background:rgba(255,107,53,.1);color:var(--warn)}
-  .type-condition{background:rgba(0,102,255,.1);color:#4d9fff}.type-action{background:rgba(124,58,237,.1);color:#a78bfa}
-  .step-connector{text-align:center;color:var(--muted);font-size:17px;margin:3px 0}
-  .add-step-btn{display:flex;align-items:center;justify-content:center;gap:7px;width:100%;padding:9px;border:1px dashed var(--border);border-radius:8px;background:transparent;color:var(--muted);font-family:var(--mono);font-size:10px;cursor:pointer;transition:all .2s;letter-spacing:1px}
-  .add-step-btn:hover{border-color:var(--accent);color:var(--accent)}
-  .step-type-grid{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-bottom:14px}
-  .step-type-option{padding:9px;border:1px solid var(--border);border-radius:8px;cursor:pointer;transition:all .2s;text-align:center}
-  .step-type-option:hover,.step-type-option.selected{border-color:var(--accent)}.step-type-option.selected{background:rgba(0,229,160,.06)}
-  .step-icon{font-size:18px;margin-bottom:3px}.step-label{font-size:10px;font-family:var(--mono);color:var(--muted)}
-  .step-type-option.selected .step-label{color:var(--accent)}
-  .config-panel{display:none;position:fixed;inset:0;z-index:200;background:rgba(8,12,16,.92);backdrop-filter:blur(8px);align-items:center;justify-content:center}
-  .config-panel.active{display:flex}
-  #waChatModal.active{display:flex!important}
-  .config-box{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:28px;width:500px;max-width:95vw;max-height:90vh;overflow-y:auto}
-  .config-title{font-size:18px;font-weight:800;margin-bottom:3px}
-  .config-sub{font-size:12px;color:var(--muted);margin-bottom:20px}
-  .info-box{background:rgba(0,180,216,.06);border:1px solid rgba(0,180,216,.2);border-radius:8px;padding:10px 14px;font-family:var(--mono);font-size:10px;color:var(--ms);line-height:1.8;margin-bottom:12px}
-  .stages-list{display:flex;flex-direction:column;gap:6px}
-  .stage-item{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 12px;display:flex;align-items:center;gap:9px}
-  .stage-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0}
-  .stage-name{font-size:12px;font-weight:600;flex:1}.stage-flow-link{font-family:var(--mono);font-size:9px;color:var(--muted)}
-  .divider{height:1px;background:var(--border);margin:14px 0}
-  .two-col{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-  .badge-pill{display:inline-flex;align-items:center;gap:3px;font-size:9px;padding:3px 7px;border-radius:20px;font-family:var(--mono)}
-  .pill-green{background:rgba(0,229,160,.1);color:var(--accent)}.pill-orange{background:rgba(255,107,53,.1);color:var(--warn)}
-  .empty-state{text-align:center;padding:36px;color:var(--muted)}
-  .empty-icon{font-size:36px;margin-bottom:10px}
-  .empty-title{font-size:14px;font-weight:700;margin-bottom:5px;color:var(--text)}.empty-sub{font-size:12px}
-  .toast{position:fixed;bottom:20px;right:20px;z-index:999;display:flex;align-items:center;gap:9px;padding:10px 18px;border-radius:10px;font-size:12px;font-weight:600;opacity:0;transform:translateY(10px);transition:all .3s;pointer-events:none}
-  .toast.show{opacity:1;transform:translateY(0)}
-  .toast-ok{background:rgba(0,229,160,.15);border:1px solid rgba(0,229,160,.3);color:var(--accent)}
-  .toast-err{background:rgba(255,45,85,.15);border:1px solid rgba(255,45,85,.3);color:var(--danger)}
-  optgroup { color: var(--accent); font-family: var(--mono); font-size: 10px; letter-spacing: 1px; background: var(--surface); }
-  optgroup option { color: var(--text); font-size: 11px; background: var(--surface2); padding-left: 8px; }
-
-  /* ══════════════════════════════════════════
-     VISUAL FLOW EDITOR — CSS COMPLETO
-  ══════════════════════════════════════════ */
-  .flow-editor{position:fixed;inset:0;z-index:300;background:#080c10;display:none;flex-direction:column}
-  .flow-editor.active{display:flex}
-
-  /* Header */
-  .fe-header{display:flex;align-items:center;gap:10px;padding:10px 16px;background:#0d1117;border-bottom:1px solid #1e2a35;flex-shrink:0;height:52px}
-  .fe-title{flex:1;min-width:0}
-  .fe-title input{background:transparent;border:none;outline:none;font-family:'Syne',sans-serif;font-size:15px;font-weight:800;color:#e8f0f7;width:100%}
-  .fe-title input::placeholder{color:#4a6070}
-
-  /* Body layout */
-  .fe-body{display:grid;grid-template-columns:220px 1fr 270px;height:calc(100vh - 52px);overflow:hidden}
-
-  /* Left palette */
-  .fe-palette{background:#0d1117;border-right:1px solid #1e2a35;padding:14px 12px;overflow-y:auto;display:flex;flex-direction:column;gap:0}
-  .fe-palette label.form-label{font-size:9px}
-  .fe-pnode{display:flex;align-items:center;gap:8px;padding:9px 11px;border-radius:8px;cursor:grab;margin-bottom:5px;border:1px solid #1e2a35;background:#131920;font-size:12px;font-weight:600;color:#e8f0f7;user-select:none;transition:border-color .15s,transform .15s}
-  .fe-pnode:hover{border-color:#00e5a0;transform:translateX(2px)}
-  .fe-pnode:active{cursor:grabbing}
-  .fe-ndot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
-
-  /* Status toggle */
-  .fe-toggle{display:grid;grid-template-columns:1fr 1fr;gap:6px}
-  .fe-toggle-btn{padding:8px 4px;border-radius:8px;text-align:center;cursor:pointer;border:1px solid #1e2a35;transition:all .15s;user-select:none}
-  .fe-toggle-btn .tbi{font-size:14px;margin-bottom:3px}
-  .fe-toggle-btn .tbl{font-family:'Space Mono',monospace;font-size:9px;color:#4a6070}
-  .fe-toggle-btn.on{border-color:#00e5a0;background:rgba(0,229,160,.08)}
-  .fe-toggle-btn.on .tbl{color:#00e5a0}
-  .fe-toggle-btn.pause{border-color:#ff6b35;background:rgba(255,107,53,.08)}
-  .fe-toggle-btn.pause .tbl{color:#ff6b35}
-
-  /* Canvas */
-  .fe-canvas-wrap{position:relative;overflow:hidden;background:#080c10;cursor:default}
-  .fe-canvas-wrap::before{content:'';position:absolute;inset:0;background-image:radial-gradient(circle,#1e2a35 1px,transparent 1px);background-size:24px 24px;pointer-events:none;z-index:0}
-  .fe-svg{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:1;overflow:visible}
-  .fe-nodes-layer{position:absolute;inset:0;z-index:2}
-
-  /* Nodes */
-  .fe-node{position:absolute;min-width:190px;max-width:230px;border-radius:10px;border:1px solid #1e2a35;background:#0d1117;cursor:default;user-select:none;box-shadow:0 4px 16px rgba(0,0,0,.5);transition:border-color .15s}
-  .fe-node:hover{border-color:rgba(0,229,160,.3)}
-  .fe-node.fe-selected{border-color:#00e5a0;box-shadow:0 0 0 2px rgba(0,229,160,.2),0 4px 16px rgba(0,0,0,.5)}
-  .fe-nh{padding:9px 11px;border-radius:10px 10px 0 0;display:flex;align-items:center;gap:7px;cursor:move;user-select:none}
-  .fe-nt{font-family:'Space Mono',monospace;font-size:9px;font-weight:700;letter-spacing:1px;flex:1}
-  .fe-ndel{background:none;border:none;color:#4a6070;cursor:pointer;font-size:12px;padding:0;line-height:1;transition:color .15s;margin-left:auto;flex-shrink:0}
-  .fe-ndel:hover{color:#ff2d55}
-  .fe-nb{padding:10px 12px 12px;font-size:11px;color:#4a6070;line-height:1.5;border-radius:0 0 10px 10px;min-height:38px;word-break:break-word}
-  .fe-nb strong{color:#e8f0f7}
-
-  /* Ports */
-  .fe-port{position:absolute;width:14px;height:14px;border-radius:50%;border:2px solid;cursor:crosshair;z-index:3;transition:transform .15s,box-shadow .15s}
-  .fe-port:hover{transform:scale(1.5)!important;box-shadow:0 0 8px currentColor}
-  .fe-pi{left:-7px;top:50%;transform:translateY(-50%);border-color:#4a6070;background:#0d1117}
-  .fe-pi:hover{border-color:#00e5a0!important;transform:translateY(-50%) scale(1.4)!important}
-  .fe-po{right:-7px;top:50%;transform:translateY(-50%)}
-  .fe-po-y{right:-7px;top:30%;transform:translateY(-50%)}
-  .fe-po-n{right:-7px;top:70%;transform:translateY(-50%)}
-  .fe-plbl{position:absolute;right:18px;font-family:'Space Mono',monospace;font-size:8px;pointer-events:none;font-weight:700;letter-spacing:.5px}
-  .fe-plbl-y{top:calc(30% - 5px);color:#00e5a0}
-  .fe-plbl-n{top:calc(70% - 5px);color:#ff2d55}
-
-  /* BH badge */
-  .bh-badge{display:inline-flex;align-items:center;gap:4px;font-family:'Space Mono',monospace;font-size:8px;padding:2px 7px;border-radius:20px;margin-top:5px}
-  .bh-on{background:rgba(0,229,160,.1);color:#00e5a0}
-  .bh-off{background:rgba(74,96,112,.15);color:#4a6070}
-
-  /* Right properties panel */
-  .fe-props{background:#0d1117;border-left:1px solid #1e2a35;padding:14px;overflow-y:auto}
-  .fe-props-title{font-family:'Space Mono',monospace;font-size:9px;letter-spacing:2px;text-transform:uppercase;margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid #1e2a35}
-
-  /* Hint box */
-  .fe-hint{background:rgba(0,229,160,.04);border:1px solid rgba(0,229,160,.15);border-radius:8px;padding:10px 12px;font-family:'Space Mono',monospace;font-size:9px;color:#4a6070;line-height:1.8;margin-top:8px}
-  .fe-hint strong{color:#e8f0f7}
-
-  /* Empty canvas hint */
-  .fe-canvas-empty{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;color:#1e2a35;pointer-events:none;z-index:0;user-select:none}
-  .fe-canvas-empty div:first-child{font-size:40px;margin-bottom:10px;opacity:.4}
-  .fe-canvas-empty div:last-child{font-family:'Space Mono',monospace;font-size:11px;letter-spacing:1px;opacity:.4}
-  ::-webkit-scrollbar{width:4px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
-  @media(max-width:1100px){.stats-grid{grid-template-columns:repeat(2,1fr)}.grid-2{grid-template-columns:1fr}}
-</style>
-</head>
-<body>
-<div class="app">
-
-<header>
-  <div class="logo">
-    <div class="logo-icon"></div>
-    <div class="logo-text">SDR <span>Command</span></div>
-  </div>
-  <div class="header-right">
-    <div class="status-dot"></div>
-    <div class="status-text" id="systemStatusText">SISTEMA ATIVO</div>
-    <button class="btn-cfg" onclick="openConfig()">⚙ CONFIGURAR</button>
-  </div>
-</header>
-
-<div class="main">
-  <aside class="sidebar">
-    <div class="sidebar-section">
-      <div class="sidebar-label">Navegação</div>
-      <div class="nav-item active" onclick="setNav(this,'dashboard')"><span class="nav-icon">◈</span> Dashboard</div>
-      <div class="nav-item" onclick="setNav(this,'analysis')"><span class="nav-icon">◎</span> Análise IA</div>
-      <div class="nav-item" onclick="setNav(this,'whatsapp')"><span class="nav-icon">◷</span> WhatsApp</div>
-      <div class="nav-item" onclick="setNav(this,'flows')"><span class="nav-icon">⬡</span> Fluxos Automáticos</div>
-      <div class="nav-item" onclick="setNav(this,'integrations')"><span class="nav-icon">⬢</span> Integrações</div>
-    </div>
-    <div class="sidebar-section">
-      <div class="sidebar-label">SDRs</div>
-      <div class="sdr-card active" onclick="selectSDR(this)">
-        <div class="sdr-header"><div class="sdr-name">Ana Lima</div><div class="sdr-score score-high">82</div></div>
-        <div class="sdr-stats"><div class="sdr-stat">Lig:<span>18</span></div><div class="sdr-stat">WA:<span>34</span></div><div class="sdr-stat">Ag:<span>6</span></div></div>
-        <div class="sdr-status"><div class="status-indicator busy"></div><div class="status-label">Em ligação</div></div>
-      </div>
-      <div class="sdr-card" onclick="selectSDR(this)">
-        <div class="sdr-header"><div class="sdr-name">Carlos Souza</div><div class="sdr-score score-med">64</div></div>
-        <div class="sdr-stats"><div class="sdr-stat">Lig:<span>12</span></div><div class="sdr-stat">WA:<span>28</span></div><div class="sdr-stat">Ag:<span>3</span></div></div>
-        <div class="sdr-status"><div class="status-indicator online"></div><div class="status-label">Online</div></div>
-      </div>
-    </div>
-  </aside>
-
-  <main class="content">
-
-    <!-- DASHBOARD -->
-    <div id="tab-dashboard" class="tab-content active">
-      <div class="stats-grid">
-        <div class="stat-card"><div class="stat-label">Ligações Hoje</div><div class="stat-value">30</div><div class="stat-delta delta-up">↑ +8 vs ontem</div></div>
-        <div class="stat-card"><div class="stat-label">Score Médio IA</div><div class="stat-value">73</div><div class="stat-delta delta-up">↑ +4 esta semana</div></div>
-        <div class="stat-card"><div class="stat-label">Reuniões Agendadas</div><div class="stat-value">9</div><div class="stat-delta delta-up">↑ 30% conversão</div></div>
-        <div class="stat-card"><div class="stat-label">Resp. WhatsApp</div><div class="stat-value">18<span style="font-size:16px;color:var(--muted)">min</span></div><div class="stat-delta delta-down">↓ meta: 10min</div></div>
-      </div>
-      <div class="grid-2">
-        <div class="panel">
-          <div class="panel-header"><div class="panel-title">Performance por SDR</div><div class="panel-badge">HOJE</div></div>
-          <div class="panel-body">
-            <div class="analysis-card">
-              <div class="analysis-top"><div class="analysis-name">Ana Lima</div><div class="analysis-time">Última lig: 14:32</div></div>
-              <div class="score-bar-wrap"><div class="score-bar-label"><span>Aderência ao Script</span><span>87%</span></div><div class="score-bar"><div class="score-fill fill-green" style="width:87%"></div></div></div>
-              <div class="score-bar-wrap"><div class="score-bar-label"><span>Qualificação</span><span>80%</span></div><div class="score-bar"><div class="score-fill fill-blue" style="width:80%"></div></div></div>
-            </div>
-            <div class="analysis-card">
-              <div class="analysis-top"><div class="analysis-name">Carlos Souza</div><div class="analysis-time">Última lig: 13:15</div></div>
-              <div class="score-bar-wrap"><div class="score-bar-label"><span>Aderência ao Script</span><span>58%</span></div><div class="score-bar"><div class="score-fill fill-orange" style="width:58%"></div></div></div>
-              <div class="score-bar-wrap"><div class="score-bar-label"><span>Qualificação</span><span>65%</span></div><div class="score-bar"><div class="score-fill fill-blue" style="width:65%"></div></div></div>
-            </div>
-          </div>
-        </div>
-        <div class="panel">
-          <div class="panel-header">
-            <div class="panel-title">WhatsApp — Ao Vivo</div>
-            <div style="display:flex;align-items:center;gap:8px">
-              <div id="waChipStatus" class="panel-badge" style="cursor:pointer" onclick="checkAllChips()">VERIFICANDO...</div>
-              <button class="btn-secondary btn-sm" style="font-size:9px" title="Diagnóstico de endpoints" onclick="runWADiagnostic()">🔬</button>
-              <button class="btn-secondary btn-sm" style="font-size:9px" onclick="checkAllChips()">↺</button>
-            </div>
-          </div>
-          <!-- Status do chip -->
-          <div id="waChipBar" style="padding:8px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:10px">
-            <span style="color:var(--muted)">Chip:</span>
-            <span id="waChipName" style="color:var(--muted)">—</span>
-          </div>
-          <div class="panel-body" style="padding:0 18px;max-height:420px;overflow-y:auto" id="waDashConvList">
-            <div class="empty-state" style="padding:20px"><div class="empty-sub">Configure a Evolution API para ver conversas.</div></div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- ANÁLISE IA -->
-    <div id="tab-analysis" class="tab-content">
-      <div class="grid-2">
-        <div>
-          <div class="panel">
-            <div class="panel-header"><div class="panel-title">Analisar Ligação com IA</div><div class="panel-badge">CLAUDE</div></div>
-            <div class="panel-body">
-              <div class="upload-zone" id="uploadZone" onclick="document.getElementById('fileInput').click()" ondragover="handleDrag(event)" ondrop="handleDrop(event)">
-                <div style="font-size:28px;margin-bottom:10px">🎙</div>
-                <div style="font-size:14px;font-weight:700;margin-bottom:5px">Solte o áudio aqui</div>
-                <div style="font-size:11px;color:var(--muted);font-family:var(--mono)">MP3, M4A, WAV — ou clique para selecionar</div>
-              </div>
-              <input type="file" id="fileInput" style="display:none" accept="audio/*" onchange="handleFile(this.files[0])">
-              <div class="processing-state" id="processingState">
-                <div class="spinner"></div>
-                <div style="font-size:12px;color:var(--muted)">Analisando com Claude via proxy...</div>
-                <div class="processing-log" id="processingLog"></div>
-              </div>
-              <div class="result-card" id="resultCard">
-                <div class="result-header">
-                  <div style="font-size:14px;font-weight:700" id="resultTitle">Análise</div>
-                  <div class="result-score" id="resultScore">—</div>
-                </div>
-                <div class="result-content" id="resultContent"></div>
-              </div>
-              <div style="margin-top:14px">
-                <label class="form-label">Ou cole uma transcrição manual</label>
-                <textarea class="form-textarea" id="manualTranscript" placeholder="Cole aqui a transcrição da ligação..." style="min-height:90px"></textarea>
-                <button class="btn-primary" style="margin-top:7px;width:100%" onclick="analyzeTranscript()">Analisar Transcrição</button>
-              </div>
-            </div>
-          </div>
-        </div>
-        <div>
-          <div class="panel">
-            <div class="panel-header"><div class="panel-title">Últimas Análises</div></div>
-            <div class="panel-body" id="analysisHistory">
-              <div class="empty-state" style="padding:20px"><div class="empty-sub">Análises aparecerão aqui após processar ligações.</div></div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- WHATSAPP -->
-    <div id="tab-whatsapp" class="tab-content">
-      <div class="panel">
-        <div class="panel-header"><div class="panel-title">Enviar Mensagem WhatsApp</div><div class="panel-badge">EVOLUTION API</div></div>
-        <div class="panel-body">
-          <div class="two-col">
-            <div class="form-group"><label class="form-label">Número (com DDI)</label><input type="text" class="form-input" id="waPhone" placeholder="5511999999999"></div>
-            <div class="form-group"><label class="form-label">Instância Evolution</label><input type="text" class="form-input" id="waInstance" placeholder="minha-instancia"></div>
-          </div>
-          <div class="form-group"><label class="form-label">Mensagem</label><textarea class="form-textarea" id="waMessage" style="min-height:70px" placeholder="Olá {{nome}}, tudo bem?"></textarea></div>
-          <div style="display:flex;gap:9px">
-            <button class="btn-primary" onclick="sendWhatsApp()">Enviar</button>
-            <button class="btn-secondary" onclick="checkWAStatus()">Verificar Status</button>
-          </div>
-          <div id="waResult" style="margin-top:10px;font-family:var(--mono);font-size:11px;color:var(--muted)"></div>
-        </div>
-      </div>
-    </div>
-
-    <!-- FLUXOS -->
-    <div id="tab-flows" class="tab-content">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px">
-        <div><div style="font-size:19px;font-weight:800;margin-bottom:3px">Fluxos de Automação</div><div style="font-size:12px;color:var(--muted)">Disparos automáticos baseados em etapas do RD Station</div></div>
-        <button class="btn-primary" onclick="openFlowEditor(null)">+ Novo Fluxo</button>
-      </div>
-      <div class="grid-2">
-        <div>
-          <div class="flow-builder">
-            <div class="flow-header"><div class="panel-title">Fluxos Configurados</div><span class="panel-badge" id="flowCount">0 FLUXOS</span></div>
-            <div class="flow-list" id="flowList"><div class="empty-state"><div class="empty-icon">⬡</div><div class="empty-title">Nenhum fluxo criado</div></div></div>
-          </div>
-        </div>
-        <div>
-          <div class="panel">
-            <div class="panel-header"><div class="panel-title">Etapas do RD Station</div><div class="panel-badge" id="rdStagesBadge">—</div></div>
-            <div class="panel-body">
-              <div id="rdStagesList"><div class="empty-state" style="padding:18px"><div class="empty-sub">Conecte o RD Station para ver as etapas.</div></div></div>
-              <button class="btn-secondary" style="margin-top:10px;width:100%" onclick="fetchRDStages()">↺ Sincronizar Etapas</button>
-            </div>
-          </div>
-          <div class="panel">
-            <div class="panel-header"><div class="panel-title">Log de Disparos</div><div class="panel-badge">AO VIVO</div></div>
-            <div class="panel-body" style="padding:10px 18px">
-              <div id="dispatchLog" style="font-family:var(--mono);font-size:10px;color:var(--muted);max-height:180px;overflow-y:auto">
-                <div class="log-line" style="color:var(--accent)">Sistema iniciado</div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- INTEGRAÇÕES -->
-    <div id="tab-integrations" class="tab-content">
-      <div style="font-size:19px;font-weight:800;margin-bottom:3px">Integrações</div>
-      <div style="font-size:12px;color:var(--muted);margin-bottom:20px">Todas as chamadas passam pelo proxy Vercel — sem CORS, sem 401</div>
-
-      <!-- PROXY STATUS -->
-      <div class="panel" style="margin-bottom:18px">
-        <div class="panel-header"><div class="panel-title">Proxy Vercel</div><div class="panel-badge" id="proxyBadge">VERIFICANDO...</div></div>
-        <div class="panel-body" style="padding:14px 18px">
-          <div class="info-box" style="margin-bottom:0">
-            Todas as chamadas para Claude, RD Station e Microsoft Graph passam por <strong>/api/proxy</strong> no mesmo domínio Vercel.<br>
-            Isso resolve CORS e o HTTP 401 causado por bloqueio de origem.<br>
-            URL do proxy: <strong id="proxyUrl">—</strong>
-          </div>
-        </div>
-      </div>
-
-      <div class="grid-2">
-        <div>
-          <div class="panel">
-            <div class="panel-header"><div class="panel-title">Status das Integrações</div></div>
-            <div class="panel-body" style="padding:0">
-
-              <!-- CLAUDE -->
-              <div class="int-block" id="intBlock_claude">
-                <div class="int-block-header" onclick="toggleInt('claude')">
-                  <div style="display:flex;align-items:center;gap:10px">
-                    <div style="width:34px;height:34px;border-radius:8px;background:linear-gradient(135deg,#7c3aed,#0066ff);display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0">🤖</div>
-                    <div><div class="integration-name">Claude AI (Anthropic)</div><div class="integration-desc">Via /api/proxy → api.anthropic.com</div></div>
-                  </div>
-                  <div style="display:flex;align-items:center;gap:7px">
-                    <div class="integration-status disconnected" id="claudeStatus">DESCONECTADO</div>
-                    <span class="int-chevron" id="chevron_claude">▸</span>
-                  </div>
-                </div>
-                <div class="int-block-body" id="intBody_claude" style="display:none">
-                  <div class="form-group"><label class="form-label">Chave API Anthropic (sk-ant-...)</label><input type="password" class="form-input" id="i_claudeApiKey" placeholder="sk-ant-api03-..."></div>
-                  <div class="form-group"><label class="form-label">Script de Qualificação GFB</label><textarea class="form-textarea" id="i_qualScript" style="min-height:70px" placeholder="1. Identificar dor&#10;2. Budget (faturamento)&#10;3. Autoridade&#10;4. Timeline&#10;5. Próximo passo"></textarea></div>
-                  <div style="display:flex;gap:7px;align-items:center">
-                    <button class="btn-primary btn-sm" onclick="saveAndTest('claude')">💾 Salvar e Testar</button>
-                    <div id="inlineResult_claude" style="font-family:var(--mono);font-size:10px;color:var(--muted)"></div>
-                  </div>
-                </div>
-              </div>
-
-              <!-- RD STATION -->
-              <div class="int-block" id="intBlock_rd">
-                <div class="int-block-header" onclick="toggleInt('rd')">
-                  <div style="display:flex;align-items:center;gap:10px">
-                    <div style="width:34px;height:34px;border-radius:8px;background:linear-gradient(135deg,#ff6b35,#ff2d55);display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0">📊</div>
-                    <div><div class="integration-name">RD Station CRM</div><div class="integration-desc">Via /api/proxy → crm.rdstation.com</div></div>
-                  </div>
-                  <div style="display:flex;align-items:center;gap:7px">
-                    <div class="integration-status disconnected" id="rdStatus">DESCONECTADO</div>
-                    <span class="int-chevron" id="chevron_rd">▸</span>
-                  </div>
-                </div>
-                <div class="int-block-body" id="intBody_rd" style="display:none">
-                  <div class="form-group"><label class="form-label">API Token Pessoal</label><input type="password" class="form-input" id="i_rdApiToken" placeholder="Cole aqui o token do RD Station CRM"></div>
-                  <div style="font-family:var(--mono);font-size:10px;color:var(--muted);padding:8px 0;line-height:1.8">
-                    Onde obter: RD Station CRM → Configurações → Integrações → API → Token Pessoal
-                  </div>
-                  <div class="form-group"><label class="form-label">ID do Pipeline (opcional)</label><input type="text" class="form-input" id="i_rdPipelineId" placeholder="ID do funil — deixe vazio para buscar todos"></div>
-                  <div style="display:flex;gap:7px;align-items:center;flex-wrap:wrap">
-                    <button class="btn-primary btn-sm" onclick="saveAndTest('rd')">💾 Salvar e Testar</button>
-                    <button class="btn-secondary btn-sm" onclick="fetchRDStages()">↺ Sync Etapas</button>
-                    <div id="inlineResult_rd" style="font-family:var(--mono);font-size:10px;color:var(--muted)"></div>
-                  </div>
-                </div>
-              </div>
-
-              <!-- SUPABASE -->
-              <div class="int-block" id="intBlock_supabase">
-                <div class="int-block-header" onclick="toggleInt('supabase')">
-                  <div style="display:flex;align-items:center;gap:10px">
-                    <div style="width:34px;height:34px;border-radius:8px;background:linear-gradient(135deg,#1e2a35,#3ecf8e);display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0">🗄</div>
-                    <div><div class="integration-name">Supabase</div><div class="integration-desc">Chamada direta do browser (CORS nativo)</div></div>
-                  </div>
-                  <div style="display:flex;align-items:center;gap:7px">
-                    <div class="integration-status disconnected" id="supabaseStatus">DESCONECTADO</div>
-                    <span class="int-chevron" id="chevron_supabase">▸</span>
-                  </div>
-                </div>
-                <div class="int-block-body" id="intBody_supabase" style="display:none">
-                  <div class="two-col">
-                    <div class="form-group"><label class="form-label">URL do Projeto</label><input type="text" class="form-input" id="i_supabaseUrl" placeholder="https://xxxxx.supabase.co"></div>
-                    <div class="form-group"><label class="form-label">Anon Key</label><input type="password" class="form-input" id="i_supabaseKey" placeholder="eyJhbGci..."></div>
-                  </div>
-                  <div style="display:flex;gap:7px;align-items:center">
-                    <button class="btn-primary btn-sm" onclick="saveAndTest('supabase')">💾 Salvar e Testar</button>
-                    <div id="inlineResult_supabase" style="font-family:var(--mono);font-size:10px;color:var(--muted)"></div>
-                  </div>
-                </div>
-              </div>
-
-              <!-- EVOLUTION -->
-              <div class="int-block" id="intBlock_evolution">
-                <div class="int-block-header" onclick="toggleInt('evolution')">
-                  <div style="display:flex;align-items:center;gap:10px">
-                    <div style="width:34px;height:34px;border-radius:8px;background:linear-gradient(135deg,#00e5a0,#0066ff);display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0">💬</div>
-                    <div><div class="integration-name">Evolution API (WhatsApp)</div><div class="integration-desc">Chamada direta — configure CORS na sua Evolution</div></div>
-                  </div>
-                  <div style="display:flex;align-items:center;gap:7px">
-                    <div class="integration-status disconnected" id="evolutionStatus">DESCONECTADO</div>
-                    <span class="int-chevron" id="chevron_evolution">▸</span>
-                  </div>
-                </div>
-                <div class="int-block-body" id="intBody_evolution" style="display:none">
-                  <div class="form-group"><label class="form-label">URL da Evolution API</label><input type="text" class="form-input" id="i_evolutionUrl" placeholder="https://sua-evolution.com"></div>
-                  <div class="two-col">
-                    <div class="form-group"><label class="form-label">API Key Global</label><input type="password" class="form-input" id="i_evolutionToken" placeholder="seu-api-key"></div>
-                    <div class="form-group"><label class="form-label">Instância Padrão</label><input type="text" class="form-input" id="i_evolutionInstance" placeholder="minha-instancia"></div>
-                  </div>
-                  <div style="display:flex;gap:7px;align-items:center">
-                    <button class="btn-primary btn-sm" onclick="saveAndTest('evolution')">💾 Salvar e Testar</button>
-                    <div id="inlineResult_evolution" style="font-family:var(--mono);font-size:10px;color:var(--muted)"></div>
-                  </div>
-                </div>
-              </div>
-
-            </div>
-          </div>
-        </div>
-
-        <div>
-          <div class="panel">
-            <div class="panel-header"><div class="panel-title">Webhook RD Station</div><div class="panel-badge">COMO INTEGRAR</div></div>
-            <div class="panel-body">
-              <label class="form-label">Seu Webhook URL</label>
-              <div class="webhook-box" onclick="copyWebhook(this)" id="webhookUrl">—</div>
-              <div style="margin-top:16px;font-size:11px;color:var(--muted);font-family:var(--mono);line-height:2">
-                RD Station CRM → Configurações<br>→ Integrações → Webhooks → Novo Webhook<br>→ Evento: "Oportunidade mudou de etapa"<br>→ Cole a URL acima → Salvar
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </main>
-</div>
-
-<!-- Config Modal -->
-<div class="config-panel" id="configPanel">
-  <div class="config-box">
-    <div class="config-title">⚙ Configurações</div>
-    <div class="config-sub">Ajuste global do sistema</div>
-    <div class="form-group"><label class="form-label">URL Base do Servidor (Vercel)</label><input type="text" class="form-input" id="serverUrl" placeholder="https://seu-projeto.vercel.app"></div>
-    <div style="display:flex;gap:9px;margin-top:20px">
-      <button class="btn-primary" style="flex:1" onclick="saveConfig()">💾 Salvar</button>
-      <button class="btn-secondary" onclick="closeConfig()">Cancelar</button>
-    </div>
-  </div>
-</div>
-
-<!-- VISUAL FLOW EDITOR -->
-<div class="flow-editor" id="flowEditor">
-  <div class="fe-header">
-    <button class="btn-secondary btn-sm" onclick="closeFlowEditor()">← Voltar</button>
-    <div class="fe-title"><input type="text" id="flowName" placeholder="Nome do fluxo..."></div>
-    <div style="display:flex;align-items:center;gap:6px;font-family:var(--mono);font-size:10px">
-      <span id="feInfoPipeline" style="color:var(--accent)"></span>
-      <span style="color:var(--muted)" id="feInfoStage"></span>
-    </div>
-    <button class="btn-primary btn-sm" onclick="saveFlow()">💾 Salvar</button>
-    <button class="btn-danger btn-sm" onclick="closeFlowEditor()">✕</button>
-  </div>
-
-  <div class="fe-body">
-    <!-- PALETTE -->
-    <div class="fe-palette">
-      <div style="font-family:var(--mono);font-size:9px;letter-spacing:2px;color:var(--accent);margin-bottom:12px;text-transform:uppercase">◈ Configuração</div>
-
-      <div class="form-group">
-        <label class="form-label">Funil</label>
-        <select class="form-select" id="feFlowPipeline" style="font-size:11px" onchange="feOnPipelineChange()">
-          <option value="">Selecione o funil...</option>
-        </select>
-      </div>
-      <div class="form-group">
-        <label class="form-label">Etapa Gatilho</label>
-        <select class="form-select" id="feFlowStage" style="font-size:11px" disabled>
-          <option value="">← Selecione o funil</option>
-        </select>
-        <div style="font-family:var(--mono);font-size:9px;color:var(--muted);margin-top:4px">Dispara quando o lead entrar nesta etapa</div>
-      </div>
-      <div class="form-group">
-        <label class="form-label">Status</label>
-        <div class="fe-toggle">
-          <div class="fe-toggle-btn on" id="feBtnOn" onclick="feSetActive(true)">
-            <div class="tbi">✅</div><div class="tbl">ATIVO</div>
-          </div>
-          <div class="fe-toggle-btn" id="feBtnOff" onclick="feSetActive(false)">
-            <div class="tbi">⏸</div><div class="tbl">PAUSADO</div>
-          </div>
-        </div>
-        <input type="hidden" id="feFlowActive" value="true">
-      </div>
-      <div class="form-group">
-        <label class="form-label">Horário Comercial</label>
-        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:8px;font-size:11px;color:var(--muted)">
-          <input type="checkbox" id="feBHEnabled" checked onchange="feToggleBH()"> Respeitar horário
-        </label>
-        <div id="feBHConfig" style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
-          <div><label class="form-label" style="font-size:8px">INÍCIO</label>
-            <input type="time" class="form-input" id="feBHStart" value="09:00" style="font-size:10px;padding:6px 8px"></div>
-          <div><label class="form-label" style="font-size:8px">FIM</label>
-            <input type="time" class="form-input" id="feBHEnd" value="18:00" style="font-size:10px;padding:6px 8px"></div>
-        </div>
-      </div>
-
-      <div class="divider"></div>
-      <div style="font-family:var(--mono);font-size:9px;letter-spacing:2px;color:var(--muted);margin-bottom:10px;text-transform:uppercase">◈ Nodes</div>
-
-      <div class="fe-pnode" draggable="true" ondragstart="fePalDrag(event,'start')">
-        <div class="fe-ndot" style="background:#00e5a0"></div>🚀 Início
-      </div>
-      <div class="fe-pnode" draggable="true" ondragstart="fePalDrag(event,'mensagem')">
-        <div class="fe-ndot" style="background:#0066ff"></div>💬 Mensagem WA
-      </div>
-      <div class="fe-pnode" draggable="true" ondragstart="fePalDrag(event,'esperar')">
-        <div class="fe-ndot" style="background:#ff6b35"></div>⏱ Aguardar
-      </div>
-      <div class="fe-pnode" draggable="true" ondragstart="fePalDrag(event,'condicao')">
-        <div class="fe-ndot" style="background:#7c3aed"></div>🔀 Condição
-      </div>
-      <div class="fe-pnode" draggable="true" ondragstart="fePalDrag(event,'acao_rd')">
-        <div class="fe-ndot" style="background:#ff2d55"></div>📋 Ação CRM
-      </div>
-      <div class="fe-pnode" draggable="true" ondragstart="fePalDrag(event,'fim')">
-        <div class="fe-ndot" style="background:#4a6070"></div>🏁 Fim
-      </div>
-
-      <div class="divider"></div>
-      <div style="font-family:var(--mono);font-size:9px;color:var(--muted);line-height:1.9">
-        <strong style="color:var(--text)">Variáveis:</strong><br>
-        {{nome}} · {{empresa}}<br>{{telefone}} · {{etapa}}<br>{{sdr}} · {{resposta}}
-      </div>
-    </div>
-
-    <!-- CANVAS -->
-    <div class="fe-canvas-wrap" id="feCanvasWrap"
-         ondragover="event.preventDefault()"
-         ondrop="feCanvasDrop(event)"
-         onmousedown="feCanvasMD(event)"
-         onmousemove="feCanvasMM(event)"
-         onmouseup="feCanvasMU(event)"
-         onmouseleave="feCanvasMU(event)">
-      <svg class="fe-svg" id="feSvg">
-        <defs>
-          <marker id="mGreen" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
-            <path d="M0,0 L0,6 L8,3 z" fill="#00e5a0"/>
-          </marker>
-          <marker id="mGray" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
-            <path d="M0,0 L0,6 L8,3 z" fill="#1e2a35"/>
-          </marker>
-          <marker id="mRed" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
-            <path d="M0,0 L0,6 L8,3 z" fill="#ff2d55"/>
-          </marker>
-        </defs>
-        <g id="feEdgesG"></g>
-        <path id="fePreview" style="display:none;fill:none;stroke:var(--accent);stroke-width:2;stroke-dasharray:6 3"/>
-      </svg>
-      <div class="fe-canvas-empty" id="feCanvasEmpty">
-        <div>⬡</div>
-        <div>Arraste nodes da esquerda para o canvas</div>
-      </div>
-      <div class="fe-nodes-layer" id="feNodesLayer"></div>
-    </div>
-
-    <!-- PROPERTIES -->
-    <div class="fe-props" id="feProps">
-      <div style="text-align:center;padding:30px 10px;color:var(--muted)">
-        <div style="font-size:30px;margin-bottom:8px">◈</div>
-        <div style="font-size:11px">Clique em um node para editar</div>
-      </div>
-    </div>
-  </div>
-</div>
-
-<div class="toast" id="toast"></div>
-
-<!-- MODAL: Conversa WhatsApp -->
-<div id="waChatModal" style="display:none;position:fixed;inset:0;z-index:400;background:rgba(8,12,16,.94);backdrop-filter:blur(8px);align-items:center;justify-content:center" onclick="if(event.target===this)closeWAChat()">
-  <div style="background:var(--surface);border:1px solid var(--border);border-radius:16px;width:500px;max-width:96vw;max-height:88vh;display:flex;flex-direction:column;overflow:hidden">
-    <div style="padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0">
-      <div>
-        <div id="waChatTitle" style="font-size:15px;font-weight:800"></div>
-        <div id="waChatSub" style="font-family:var(--mono);font-size:10px;color:var(--accent);margin-top:2px"></div>
-      </div>
-      <button onclick="closeWAChat()" style="background:transparent;border:1px solid var(--border);color:var(--muted);width:30px;height:30px;border-radius:8px;cursor:pointer;font-size:14px">✕</button>
-    </div>
-    <div id="waChatMessages" style="flex:1;overflow-y:auto;padding:16px 20px;display:flex;flex-direction:column"></div>
-  </div>
-</div>
-</div>
-
+<!-- ================================================================
+     PATCH GFB v2 — Supabase + Evolution Proxy Fix (CORRIGIDO)
+     Adicione este bloco ANTES do </body> no sdr-command.html
+     
+     FIXES v2:
+     - Usa DOMContentLoaded em vez de window.onload (não quebra botões)
+     - IIFE isola todas as variáveis (sem conflito com globals do HTML)
+     - Guard em setStatus (sem ReferenceError se função não existir)
+     - Hook seguro: aguarda o init original via evento, não override
+================================================================ -->
 <script>
-// ====================================================================
-// STATE
-// ====================================================================
-const LS = { get: k => localStorage.getItem(k)||'', set: (k,v) => localStorage.setItem(k,v) };
+(function() {
+  'use strict';
 
-let config = {
-  claudeApiKey:      LS.get('claude_key'),
-  qualScript:        LS.get('qual_script'),
-  rdApiToken:        LS.get('rd_api_token'),
-  rdPipelineId:      LS.get('rd_pipeline_id'),
-  supabaseUrl:       LS.get('sb_url'),
-  supabaseKey:       LS.get('sb_key'),
-  evolutionUrl:      LS.get('evolution_url'),
-  evolutionToken:    LS.get('evolution_token'),
-  evolutionInstance: LS.get('evolution_instance'),
-  serverUrl:         LS.get('server_url')
-};
+  // ================================================================
+  // CONSTANTS (isoladas no IIFE — sem conflito com o HTML original)
+  // ================================================================
+  var SB_URL = 'https://fdgjxqthjaxaevvgwfob.supabase.co';
+  var SB_KEY = 'sb_publishable_hoaEV8xGZBQmaoH5T_Cxyg_SVlKAiVU';
 
-let flows = JSON.parse(LS.get('flows') || '[]');
-let rdStages = JSON.parse(LS.get('rd_stages') || '[]');
-let editingFlowId = null;
-let currentSteps = [];
-
-// Pipelines GFB fixos
-const GFB_PIPELINES = [
-  { id: '694066f13f55a5001b50eafb', name: 'Funil Leads Frios (Até 40k)' },
-  { id: '694aabf03f1ed8001d44a46b', name: 'Webnários Quentes (Preen.Aplicação)' },
-  { id: '6a00b9afc9e2b10013a75652', name: 'Funil +40k' }
-];
-
-// ====================================================================
-// PROXY — todas as chamadas externas passam por aqui
-// Resolve CORS e HTTP 401 causados por bloqueio de origem
-// ====================================================================
-async function callProxy(service, payload, token, apiKey) {
-  const proxyUrl = '/api/proxy';
-  const res = await fetch(proxyUrl, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ service, payload, token, apiKey })
-  });
-
-  // Retorna dados mesmo em erro para permitir log detalhado
-  const data = await res.json().catch(() => ({ error: 'Resposta inválida do proxy' }));
-
-  if (!res.ok) {
-    const msg = data?.error?.message || data?.error || data?.message || `HTTP ${res.status}`;
-    throw new Error(msg);
-  }
-  return data;
-}
-
-// ====================================================================
-// CLAUDE — via proxy
-// ====================================================================
-async function claudeFetch(messages, maxTokens = 1000) {
-  if (!config.claudeApiKey) throw new Error('Chave Claude não configurada');
-  return callProxy('claude', {
-    model: 'claude-sonnet-4-20250514',
-    max_tokens: maxTokens,
-    messages
-  }, null, config.claudeApiKey);
-}
-
-async function _testClaude(resultEl) {
-  try {
-    const data = await claudeFetch([{ role:'user', content:'Responda apenas: OK' }], 10);
-    const reply = data.content?.map(i=>i.text||'').join('') || '';
-    if (reply.includes('OK') || data.id) {
-      setStatus('claudeStatus', true);
-      resultEl.style.color = 'var(--accent)';
-      resultEl.textContent = '✓ Claude respondendo via proxy!';
-      document.querySelector('.status-text').textContent = 'CLAUDE ATIVO';
-    } else {
-      throw new Error('Resposta inesperada: ' + JSON.stringify(data).substring(0,80));
-    }
-  } catch(e) {
-    setStatus('claudeStatus', false);
-    resultEl.style.color = 'var(--danger)';
-    resultEl.textContent = '✗ ' + e.message;
-  }
-}
-
-// ====================================================================
-// RD STATION — via proxy
-// ====================================================================
-async function rdFetch(endpoint, method = 'GET', body = null) {
-  if (!config.rdApiToken) throw new Error('Token RD Station não configurado');
-  return callProxy('rd', { endpoint, method, body }, config.rdApiToken);
-}
-
-async function _testRD(resultEl) {
-  try {
-    const data = await rdFetch('users?limit=1');
-    setStatus('rdStatus', true, 'CONECTADO');
-    resultEl.style.color = 'var(--accent)';
-    resultEl.textContent = `✓ RD Station conectado! Usuários: ${data.users?.length ?? '—'}`;
-    await fetchRDStages();
-  } catch(e) {
-    setStatus('rdStatus', false);
-    resultEl.style.color = 'var(--danger)';
-    resultEl.textContent = '✗ ' + e.message;
-  }
-}
-
-async function fetchRDStages() {
-  const badge = document.getElementById('rdStagesBadge');
-  badge.textContent = 'CARREGANDO...';
-  rdStages = [];
-  try {
-    for (const pipeline of GFB_PIPELINES) {
-      try {
-        const data = await rdFetch('deal_stages?deal_pipeline_id=' + pipeline.id);
-        const stages = data.deal_stages || data || [];
-        stages.forEach(s => rdStages.push({
-          id: s._id || s.id,
-          name: s.name,
-          pipelineId: pipeline.id,
-          pipelineName: pipeline.name
-        }));
-      } catch(e2) {
-        addDispatchLog('Erro no funil ' + pipeline.name + ': ' + e2.message);
-      }
-    }
-    LS.set('rd_stages', JSON.stringify(rdStages));
-    renderRDStages();
-    populateStageTriggerSelect();
-    badge.textContent = rdStages.length + ' ETAPAS';
-    addDispatchLog('RD: ' + rdStages.length + ' etapas carregadas dos 3 funis');
-  } catch(e) {
-    badge.textContent = 'ERRO';
-    addDispatchLog('RD etapas erro: ' + e.message);
-  }
-}
-
-async function moveRDCard(dealId, stageId) {
-  try {
-    await rdFetch('deals/' + dealId, 'PUT', { deal: { deal_stage_id: stageId } });
-    addDispatchLog('RD: card ' + dealId + ' movido');
-    return true;
-  } catch(e) { addDispatchLog('RD erro: ' + e.message); return false; }
-}
-
-// ====================================================================
-// SUPABASE — chamada direta (suporta CORS nativo)
-// ====================================================================
-async function supabaseFetch(path, method = 'GET', body = null) {
-  if (!config.supabaseUrl || !config.supabaseKey) throw new Error('Supabase não configurado');
-  const opts = {
-    method,
-    headers: {
-      'apikey': config.supabaseKey,
-      'Authorization': 'Bearer ' + config.supabaseKey,
-      'Content-Type': 'application/json',
-      'Prefer': method === 'POST' ? 'return=representation' : ''
-    }
-  };
-  if (body) opts.body = JSON.stringify(body);
-  const res = await fetch(config.supabaseUrl + '/rest/v1/' + path, opts);
-  if (!res.ok && res.status !== 409) throw new Error('Supabase HTTP ' + res.status);
-  return res.json().catch(() => ({}));
-}
-
-async function _testSupabase(resultEl) {
-  try {
-    if (!config.supabaseUrl || !config.supabaseKey) throw new Error('Preencha URL e chave');
-    const res = await fetch(config.supabaseUrl + '/rest/v1/', {
-      headers: { 'apikey': config.supabaseKey, 'Authorization': 'Bearer ' + config.supabaseKey }
-    });
-    if (res.ok || res.status === 400) {
-      setStatus('supabaseStatus', true);
-      resultEl.style.color = 'var(--accent)';
-      resultEl.textContent = '✓ Supabase conectado!';
-    } else throw new Error('HTTP ' + res.status + ' — verifique a Anon Key');
-  } catch(e) {
-    setStatus('supabaseStatus', false);
-    resultEl.style.color = 'var(--danger)';
-    resultEl.textContent = '✗ ' + e.message;
-  }
-}
-
-// ====================================================================
-// EVOLUTION — chamada direta
-// ====================================================================
-function evoHeaders() {
-  return { 'Content-Type': 'application/json', 'apikey': config.evolutionToken };
-}
-
-async function _testEvolution(resultEl) {
-  if (!config.evolutionUrl || !config.evolutionToken) {
-    setStatus('evolutionStatus', false);
-    resultEl.style.color = 'var(--danger)';
-    resultEl.textContent = '✗ URL e API Key obrigatórios';
-    return;
-  }
-  resultEl.textContent = '⏳ Testando...'; resultEl.style.color = 'var(--warn)';
-  try {
-    const data = await evoProxy('/instance/fetchInstances');
-    const count = Array.isArray(data) ? data.length : (data.instances?.length || data.data?.length || '?');
-    setStatus('evolutionStatus', true, 'CONECTADO');
-    resultEl.style.color = 'var(--accent)';
-    resultEl.textContent = '✓ Evolution conectada! Instâncias: ' + count;
-    // Atualiza o painel ao vivo automaticamente após teste
-    setTimeout(() => checkAllChips(), 300);
-  } catch(e) {
-    setStatus('evolutionStatus', false);
-    resultEl.style.color = 'var(--danger)';
-    const isCors = e.message.includes('fetch') || e.message.includes('Failed') || e.message.includes('CORS');
-    resultEl.textContent = '✗ ' + e.message + (isCors ? ' — habilite CORS na Evolution para ' + window.location.origin : '');
-  }
-}
-
-async function sendWhatsApp() {
-  const phone = document.getElementById('waPhone').value.trim().replace(/\D/g,'');
-  const message = document.getElementById('waMessage').value.trim();
-  const instance = document.getElementById('waInstance').value.trim() || config.evolutionInstance;
-  const resultEl = document.getElementById('waResult');
-  if (!phone || !message) { showToast('Preencha número e mensagem','err'); return; }
-  if (!config.evolutionUrl) { showToast('Configure a Evolution API','err'); return; }
-  resultEl.textContent = '⏳ Enviando...'; resultEl.style.color = 'var(--warn)';
-  try {
-    const res = await fetch(config.evolutionUrl + '/message/sendText/' + instance, {
-      method: 'POST', headers: evoHeaders(),
-      body: JSON.stringify({ number: phone, text: message })
-    });
-    const data = await res.json();
-    if (res.ok) {
-      resultEl.style.color = 'var(--accent)';
-      resultEl.textContent = '✓ Enviado! ID: ' + (data.key?.id || 'ok');
-    } else throw new Error(data.message || 'Erro');
-  } catch(e) { resultEl.style.color='var(--danger)'; resultEl.textContent='✗ '+e.message; }
-}
-
-
-// ── WHATSAPP AO VIVO ──────────────────────────────────────────────
-
-// Estado de chat aberto para auto-refresh
-let _waChatOpen = null; // { remoteJid, instance, name }
-let _waRefreshInterval = null;
-
-async function evoProxy(path, method='GET', body=null) {
-  // Chamada direta à Evolution API — CORS deve estar habilitado no servidor Evolution
-  const base = (config.evolutionUrl || '').replace(/\/+$/, '');
-  const opts = {
-    method,
-    headers: { 'Content-Type': 'application/json', 'apikey': config.evolutionToken }
-  };
-  if (body) opts.body = JSON.stringify(body);
-  const r = await fetch(base + path, opts);
-  if (!r.ok) {
-    const errText = await r.text().catch(() => '');
-    throw new Error('HTTP ' + r.status + (errText ? ': ' + errText.substring(0, 120) : ''));
-  }
-  return r.json();
-}
-
-function waDebugLog(msg, color='var(--muted)') {
-  const list = document.getElementById('waDashConvList');
-  if (!list) return;
-  const existing = list.querySelector('.wa-debug-log');
-  let log = existing;
-  if (!log) {
-    list.innerHTML = '<div class="wa-debug-log" style="padding:12px 18px;font-family:var(--mono);font-size:10px;line-height:2"></div>';
-    log = list.querySelector('.wa-debug-log');
-  }
-  const line = document.createElement('div');
-  line.style.color = color;
-  line.textContent = '▸ ' + msg;
-  log.appendChild(line);
-  log.scrollTop = log.scrollHeight;
-}
-
-async function checkAllChips() {
-  const chipBar = document.getElementById('waChipBar');
-  const chipStatus = document.getElementById('waChipStatus');
-  const list = document.getElementById('waDashConvList');
-
-  // Limpa e inicia debug
-  if (list) list.innerHTML = '<div class="wa-debug-log" style="padding:12px 18px;font-family:var(--mono);font-size:10px;line-height:2"></div>';
-
-  if (!config.evolutionUrl || !config.evolutionToken) {
-    waDebugLog('❌ Sem config: vá em Integrações → Evolution e salve URL + API Key', 'var(--danger)');
-    if (chipStatus) { chipStatus.textContent = 'SEM CONFIG'; chipStatus.style.background = 'rgba(255,45,85,.1)'; chipStatus.style.color = 'var(--danger)'; }
-    return;
-  }
-  waDebugLog('URL: ' + config.evolutionUrl, 'var(--accent)');
-  waDebugLog('Token: ' + (config.evolutionToken ? config.evolutionToken.substring(0,8)+'...' : 'VAZIO'), 'var(--accent)');
-  if (chipStatus) { chipStatus.textContent = 'BUSCANDO...'; chipStatus.style.background = 'rgba(255,107,53,.1)'; chipStatus.style.color = 'var(--warn)'; }
-
-  try {
-    waDebugLog('Chamando /instance/fetchInstances...');
-    let data;
+  // ================================================================
+  // FIX 1: evoProxy via Vercel proxy (resolve CORS definitivamente)
+  // Sobrescreve no window para ser acessível pelo HTML original
+  // ================================================================
+  window.evoProxy = async function evoProxy(path, method, body) {
+    method = method || 'GET';
+    body = body || null;
     try {
-      data = await evoProxy('/instance/fetchInstances');
-      waDebugLog('✓ Resposta recebida via proxy/direto', 'var(--accent)');
-    } catch(e) {
-      waDebugLog('❌ Erro na chamada: ' + e.message, 'var(--danger)');
-      waDebugLog('→ Verifique CORS na Evolution: permita origem ' + window.location.origin, 'var(--warn)');
-      if (chipStatus) { chipStatus.textContent = 'ERRO CORS/REDE'; chipStatus.style.background='rgba(255,45,85,.1)'; chipStatus.style.color='var(--danger)'; }
-      return;
-    }
-
-    waDebugLog('Tipo da resposta: ' + (Array.isArray(data) ? 'array['+data.length+']' : typeof data));
-
-    // Evolution v1 retorna array direto, v2 pode retornar {instances:[...]} ou {data:[...]}
-    const instances = Array.isArray(data) ? data : (data.instances || data.data || Object.values(data));
-    waDebugLog('Instâncias encontradas: ' + instances.length, instances.length ? 'var(--accent)' : 'var(--warn)');
-
-    if (!instances.length) {
-      waDebugLog('⚠ Nenhuma instância retornada. Verifique a API Key.', 'var(--warn)');
-      if (chipStatus) { chipStatus.textContent = 'SEM INSTÂNCIA'; chipStatus.style.background='rgba(255,107,53,.1)'; chipStatus.style.color='var(--warn)'; }
-      return;
-    }
-
-    let html = '<span style="color:var(--muted)">Chips:</span>';
-    let anyConnected = false;
-    // Usa a primeira instância da lista (independente de estado) como fallback garantido
-    const firstInstance = instances[0]
-      ? (instances[0].instance?.instanceName || instances[0].instanceName || instances[0].name || instances[0].id)
-      : null;
-    let firstConnectedInstance = null;
-
-    for (const inst of instances) {
-      const name = inst.instance?.instanceName || inst.instanceName || inst.name || inst.id || '?';
-      let state = inst.instance?.state || inst.instance?.connectionStatus || inst.state || inst.connectionStatus || null;
-
-      if (!state) {
-        try {
-          const sd = await evoProxy('/instance/connectionState/' + name);
-          state = sd.instance?.state || sd.state || sd.connectionStatus || 'open';
-        } catch(e2) {
-          // Se não conseguiu checar estado mas a instância existe, assume conectada
-          state = 'open';
-        }
+      var cfg = window.config || {};
+      var res = await fetch('/api/proxy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          service: 'evolution',
+          evolutionUrl: cfg.evolutionUrl,
+          payload: { path: path, method: method, body: body },
+          token: cfg.evolutionToken
+        })
+      });
+      if (!res.ok) {
+        var e = await res.json().catch(function() { return {}; });
+        throw new Error(e.error || 'HTTP ' + res.status);
       }
-      // Considera conectada qualquer estado que não seja explicitamente desconectado
-      const disconnected = ['close','DISCONNECTED','disconnected','connecting','CONNECTING'].includes(state);
-      const connected = !disconnected;
-      if (connected && !firstConnectedInstance) firstConnectedInstance = name;
-      if (connected) anyConnected = true;
-
-      // Auto-salva a instância no config se só houver uma
-      if (instances.length === 1 && !config.evolutionInstance) {
-        config.evolutionInstance = name;
-        localStorage.setItem('evolution_instance', name);
-      }
-
-      html += `<span style="display:inline-flex;align-items:center;gap:4px;margin-left:8px;padding:2px 8px;border-radius:20px;background:${connected?'rgba(0,229,160,.1)':'rgba(255,45,85,.1)'};color:${connected?'var(--accent)':'var(--danger)'}">
-        <span style="width:6px;height:6px;border-radius:50%;background:${connected?'var(--accent)':'var(--danger)'};display:inline-block"></span>
-        ${name}
-      </span>`;
+      return res.json();
+    } catch (proxyErr) {
+      console.warn('[evoProxy] proxy falhou, tentando direto:', proxyErr.message);
+      var cfg2 = window.config || {};
+      var base = (cfg2.evolutionUrl || '').replace(/\/+$/, '');
+      var opts = {
+        method: method || 'GET',
+        headers: { 'Content-Type': 'application/json', 'apikey': cfg2.evolutionToken }
+      };
+      if (body) opts.body = JSON.stringify(body);
+      var r = await fetch(base + path, opts);
+      if (!r.ok) throw new Error('HTTP ' + r.status + ' (direto)');
+      return r.json();
     }
-    if (chipBar) chipBar.innerHTML = html;
-    if (chipStatus) {
-      chipStatus.textContent = anyConnected ? 'CONECTADO' : 'DESCONECTADO';
-      chipStatus.style.background = anyConnected ? 'rgba(0,229,160,.1)' : 'rgba(255,45,85,.1)';
-      chipStatus.style.color = anyConnected ? 'var(--accent)' : 'var(--danger)';
-    }
+  };
 
-    // Garante que sempre carrega: usa instância salva > primeira conectada > primeira da lista
-    const instanceToLoad = config.evolutionInstance || firstConnectedInstance || firstInstance;
-    if (instanceToLoad) {
-      await loadWAConversations(instanceToLoad);
-    }
-  } catch(e) {
-    waDebugLog('❌ Erro inesperado: ' + e.message, 'var(--danger)');
-    if (chipStatus) { chipStatus.textContent = 'ERRO'; }
-    console.error('[checkAllChips]', e);
-  }
-}
-
-async function loadWAConversations(instanceName) {
-  const list = document.getElementById('waDashConvList');
-  if (!config.evolutionUrl || !config.evolutionToken) return;
-  const instance = instanceName || config.evolutionInstance;
-  if (!instance) return;
-
-  function getTs(c) {
-    const vals = [
-      c.lastMessage?.messageTimestamp, c.lastMessage?.timestamp,
-      c.updatedAt, c.lastMsgTimestamp, c.timestamp
-    ].map(v => { const n = Number(v)||0; return n > 1e12 ? n/1000 : n; });
-    return Math.max(...vals);
+  // ================================================================
+  // FIX 2: Supabase — dados reais de ligações
+  // ================================================================
+  async function sbFetch(path) {
+    var res = await fetch(SB_URL + '/rest/v1/' + path, {
+      headers: { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY }
+    });
+    return res.json();
   }
 
-  function getUnread(c) {
-    return Number(c.unreadCount||c.unreadMessages||c.unread||c.messagesUnread||c.count?.unread||0);
+  function parseAIScore(analysis) {
+    var m = (analysis || '').match(/Nota[^:]*:\s*(\d+)/i);
+    return m ? parseInt(m[1]) : null;
   }
 
-  function extractMsgText(lm) {
-    if (!lm) return '';
-    const m = lm.message || lm;
-    return m?.conversation || m?.extendedTextMessage?.text
-      || m?.imageMessage?.caption || m?.videoMessage?.caption
-      || m?.documentMessage?.title || lm?.body || lm?.text || lm?.content || '';
-  }
-
-  function formatPhone(rawId) {
-    if (!rawId) return '';
-    const s = String(rawId);
-    if (s.includes('@g.us')) return '\uD83D\uDC65 Grupo';
-    // @lid = internal WhatsApp ID, not a real phone number
-    if (s.includes('@lid')) return '';
-    let id = s.replace(/@s\.whatsapp\.net/,'').replace(/:.*$/,'').trim();
-    if (/^\d{12,13}$/.test(id) && id.startsWith('55')) {
-      const ddd = id.slice(2,4), num = id.slice(4);
-      return '+55 (' + ddd + ') ' + (num.length>=9 ? num.slice(0,5)+'-'+num.slice(5) : num.slice(0,4)+'-'+num.slice(4));
+  // Guard seguro: só chama setStatus se existir no escopo global
+  function safeSetStatus(id, ok, msg) {
+    if (typeof window.setStatus === 'function') {
+      window.setStatus(id, ok, msg);
     }
-    if (/^\d{10,15}$/.test(id)) return id;
-    return '';
   }
 
-  try {
-    // Busca chats — endpoint confirmado: GET /chat/findChats
-    const raw = await evoProxy('/chat/findChats/' + instance, 'GET');
+  async function loadLigacoesData() {
+    try {
+      var all = await sbFetch('ligacoes?select=*&order=created_at.desc&limit=300');
+      if (!Array.isArray(all)) return;
 
-    // Normaliza resposta (array direto ou wrapped)
-    let all = Array.isArray(raw) ? raw
-      : Array.isArray(raw?.chats) ? raw.chats
-      : Array.isArray(raw?.data) ? raw.data
-      : Array.isArray(raw?.conversations) ? raw.conversations
-      : Array.isArray(raw?.records) ? raw.records
-      : typeof raw === 'object' && raw !== null ? Object.values(raw).find(v => Array.isArray(v)) || []
-      : [];
+      var today = new Date().toLocaleDateString('sv-SE');
+      var todayCalls = all.filter(function(c) {
+        return (c.started_at || c.created_at || '').startsWith(today);
+      });
 
-    // Garante que cada item tenha campo 'id'
-    all = all.map(c => ({ ...c, id: c.id || c.remoteJid || c.jid || '' }))
-             .filter(c => c.id && !c.id.includes('@broadcast') && !c.id.includes('@newsletter'));
+      // Atualiza os 4 KPI cards
+      var svs = document.querySelectorAll('.stat-card .stat-value');
+      if (svs[0]) svs[0].textContent = todayCalls.length;
 
-    if (!all.length) {
-      list.innerHTML = '<div style="text-align:center;padding:20px;color:var(--muted);font-family:var(--mono);font-size:10px">Nenhuma conversa em "' + instance + '".</div>';
-      return;
-    }
+      var scores = all.map(function(c) { return parseAIScore(c.ai_analysis); }).filter(Boolean);
+      var avgScore = scores.length ? (scores.reduce(function(a,b){return a+b;},0)/scores.length).toFixed(1) : '—';
+      if (svs[1]) svs[1].textContent = avgScore;
 
-    // Ordena por não lidas + recência, pega top 20
-    const chats = all.sort((a,b) => {
-      const ud = getUnread(b) - getUnread(a);
-      return ud !== 0 ? ud : getTs(b) - getTs(a);
-    }).slice(0, 20);
+      var meetings = todayCalls.filter(function(c) { return c.result === 'Agendou'; }).length;
+      if (svs[2]) svs[2].textContent = meetings;
+      if (svs[3]) svs[3].textContent = all.length;
 
-    const instColors = ['135deg,#0066ff,#00b4d8','135deg,#7c3aed,#0066ff','135deg,#00e5a0,#0066ff'];
-    const avatarGradient = instColors[0];
+      updateSDRsFromDB(all, todayCalls);
+      updatePerfPanel(all);
+      renderCallsList(all.slice(0, 10));
+      renderAnalysisHistory(all.slice(0, 20));
+      safeSetStatus('supabaseStatus', true, 'CONECTADO');
+    } catch(e) { console.error('[loadLigacoesData]', e); }
+  }
 
-    list.innerHTML = chats.map(c => {
-      const rawId = c.id;
-      const phone = formatPhone(rawId);
-      const name = c.pushName || c.name || c.verifiedName || (phone||'') || (rawId.replace(/@.*$/,'').substring(0,15)) || 'Desconhecido';
-      const phoneLabel = (phone && phone !== name) ? phone : '';
-      const initials = name.replace(/[^a-zA-Z0-9\u00C0-\u024F]/g,' ').trim()
-        .split(/\s+/).filter(Boolean).map(w=>w[0]).join('').substring(0,2).toUpperCase() || '?';
-      const lastMsg = extractMsgText(c.lastMessage) || c.preview || c.snippet || '';
-      const lastMsgShort = lastMsg.length > 55 ? lastMsg.substring(0,55)+'\u2026' : lastMsg;
-      const ts = getTs(c);
-      let time = '';
-      if (ts) {
-        const d = new Date(ts * 1000), now = Date.now()/1000;
-        time = (now - ts) < 86400
-          ? d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})
-          : d.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'});
-      }
-      const unread = getUnread(c);
-      const isGroup = rawId.includes('@g.us');
-      const safeName = name.replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'&quot;');
-      const safeId = rawId.replace(/'/g,'%27');
+  function updateSDRsFromDB(all, todayCalls) {
+    var bySDR = {};
+    all.forEach(function(c) {
+      var name = (c.sdr_name || 'SDR').trim();
+      if (!bySDR[name]) bySDR[name] = { all:[], today:[] };
+      bySDR[name].all.push(c);
+    });
+    todayCalls.forEach(function(c) {
+      var name = (c.sdr_name || 'SDR').trim();
+      if (bySDR[name]) bySDR[name].today.push(c);
+    });
 
-      return `<div class="call-item" style="padding:12px 18px;cursor:pointer" onclick="openWAChat('\${safeId}','\${instance}','\${safeName}')">
-        <div class="call-avatar" style="background:linear-gradient(\${avatarGradient});position:relative;flex-shrink:0">
-          \${initials}
-          \${unread>0?'<span style="position:absolute;top:-4px;right:-4px;background:var(--danger);color:#fff;border-radius:50%;width:16px;height:16px;font-size:9px;display:flex;align-items:center;justify-content:center;font-weight:700">'+Math.min(unread,9)+'</span>':''}
-        </div>
-        <div class="call-info" style="min-width:0;flex:1">
-          <div class="call-top" style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
-            <div style="min-width:0">
-              <div class="call-name" style="font-size:12px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">\${name}\${isGroup?' \uD83D\uDC65':''}</div>
-              \${phoneLabel?'<div style="font-family:var(--mono);font-size:10px;color:var(--accent)">'+phoneLabel+'</div>':''}
-            </div>
-            <div style="flex-shrink:0;text-align:right">
-              <div class="call-time">\${time}</div>
-              <div style="font-family:var(--mono);font-size:9px;color:var(--muted);margin-top:2px">\uD83D\uDCF1 \${instance}</div>
-            </div>
-          </div>
-          <div class="call-meta" style="margin-top:4px;font-size:11px;color:\${unread>0?'var(--text)':'var(--muted)'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:\${unread>0?'600':'400'}">\${lastMsgShort}</div>
-        </div>
-      </div>`;
+    var sections = document.querySelectorAll('.sidebar-section');
+    var sdrSection = sections[sections.length - 1];
+    if (!sdrSection || !Object.keys(bySDR).length) return;
+
+    var cards = Object.entries(bySDR).map(function(entry) {
+      var name = entry[0], data = entry[1];
+      var sc = data.all.map(function(c){return parseAIScore(c.ai_analysis);}).filter(Boolean);
+      var avg = sc.length ? Math.round(sc.reduce(function(a,b){return a+b;},0)/sc.length) : null;
+      var agendou = data.all.filter(function(c){return c.result==='Agendou';}).length;
+      var last = data.all[0];
+      var lastTime = last && last.started_at ? new Date(last.started_at).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}) : '—';
+      var scoreClass = (avg||0) >= 7 ? 'score-high' : 'score-med';
+      // Escape name para uso seguro no onclick
+      var safeName = name.replace(/'/g, "\\'");
+      return '<div class="sdr-card" onclick="if(window.selectSDR)selectSDR(this);if(window.patchFilterSDR)window.patchFilterSDR(\'' + safeName + '\')">'
+        + '<div class="sdr-header"><div class="sdr-name">' + name + '</div>'
+        + '<div class="sdr-score ' + scoreClass + '">' + (avg !== null ? avg+'/10' : '—') + '</div></div>'
+        + '<div class="sdr-stats">'
+        + '<div class="sdr-stat">Hoje:<span>' + data.today.length + '</span></div>'
+        + '<div class="sdr-stat">Total:<span>' + data.all.length + '</span></div>'
+        + '<div class="sdr-stat">Ag:<span>' + agendou + '</span></div>'
+        + '</div>'
+        + '<div class="sdr-status"><div class="status-indicator online"></div>'
+        + '<div class="status-label">Última: ' + lastTime + '</div></div>'
+        + '</div>';
     }).join('');
-
-  } catch(e) {
-    list.innerHTML = '<div style="text-align:center;padding:20px;color:var(--danger);font-family:var(--mono);font-size:10px">Erro: ' + e.message + '</div>';
-    console.error('[loadWAConversations]', e);
-  }
-}
-
-async function openWAChat(remoteJid, instance, name) {
-  // Salva estado do chat aberto para auto-refresh
-  _waChatOpen = { remoteJid, instance, name };
-
-  const modal = document.getElementById('waChatModal');
-  if (!modal) return;
-  document.getElementById('waChatTitle').textContent = name;
-  document.getElementById('waChatSub').textContent = '📱 ' + instance + '  ·  ' + remoteJid.replace('@s.whatsapp.net','').replace('@lid','');
-  document.getElementById('waChatMessages').innerHTML = '<div style="text-align:center;padding:20px;font-family:var(--mono);font-size:10px;color:var(--muted)">⏳ Carregando mensagens...</div>';
-  modal.classList.add('active');
-
-  // Para qualquer refresh anterior
-  if (_waRefreshInterval) { clearInterval(_waRefreshInterval); _waRefreshInterval = null; }
-
-  await _loadWAChatMessages(remoteJid, instance);
-
-  // Auto-refresh a cada 5s enquanto o chat estiver aberto
-  _waRefreshInterval = setInterval(async () => {
-    if (_waChatOpen && _waChatOpen.remoteJid === remoteJid) {
-      await _loadWAChatMessages(remoteJid, instance, true);
-    }
-  }, 5000);
-}
-
-// Cache do endpoint que funcionou para não tentar os outros toda vez
-let _workingMsgEndpoint = null;
-
-async function _fetchChatMessages(instance, remoteJid) {
-  // Se já sabemos qual endpoint funciona, usa direto
-  if (_workingMsgEndpoint) {
-    try {
-      return await _tryMsgEndpoint(_workingMsgEndpoint, instance, remoteJid);
-    } catch(e) {
-      console.log('[WA] Endpoint cached falhou, resetando:', e.message);
-      _workingMsgEndpoint = null;
-    }
+    sdrSection.innerHTML = '<div class="sidebar-label">SDRs — Tempo Real</div>' + cards;
   }
 
-  // Todos os endpoints conhecidos da Evolution v1/v2/v2.2
-  const strategies = [
-    // Evolution v2 — endpoint principal
-    { key: 'v2_chat_msgs', fn: () => evoProxy('/chat/findMessages/' + instance, 'POST',
-        { where: { key: { remoteJid } }, limit: 40 }) },
-    // Evolution v2 — variante com remoteJid direto no body
-    { key: 'v2_chat_msgs_flat', fn: () => evoProxy('/chat/findMessages/' + instance, 'POST',
-        { remoteJid, limit: 40 }) },
-    // Evolution v1 — messages endpoint
-    { key: 'v1_msg_find', fn: () => evoProxy('/message/findMessages/' + instance, 'POST',
-        { where: { key: { remoteJid } }, limit: 40 }) },
-    // Evolution v2.2+ — novo path
-    { key: 'v22_messages', fn: () => evoProxy('/chat/messages/' + instance + '/' + encodeURIComponent(remoteJid), 'GET') },
-    // Evolution v1 GET variant
-    { key: 'v1_msg_get', fn: () => evoProxy('/message/' + instance + '?remoteJid=' + encodeURIComponent(remoteJid) + '&limit=40', 'GET') },
-  ];
-
-  for (const s of strategies) {
-    try {
-      console.log('[WA] Tentando endpoint:', s.key);
-      const result = await s.fn();
-      const msgs = _extractMsgs(result);
-      if (msgs.length > 0) {
-        _workingMsgEndpoint = s.key;
-        console.log('[WA] ✓ Endpoint funcionou:', s.key, '→', msgs.length, 'msgs');
-        return msgs;
-      }
-      console.log('[WA] Endpoint', s.key, 'retornou vazio');
-    } catch(e) {
-      console.log('[WA] Endpoint', s.key, 'falhou:', e.message);
-    }
-  }
-  return [];
-}
-
-function _tryMsgEndpoint(key, instance, remoteJid) {
-  const map = {
-    'v2_chat_msgs':     () => evoProxy('/chat/findMessages/' + instance, 'POST', { where: { key: { remoteJid } }, limit: 40 }),
-    'v2_chat_msgs_flat':() => evoProxy('/chat/findMessages/' + instance, 'POST', { remoteJid, limit: 40 }),
-    'v1_msg_find':      () => evoProxy('/message/findMessages/' + instance, 'POST', { where: { key: { remoteJid } }, limit: 40 }),
-    'v22_messages':     () => evoProxy('/chat/messages/' + instance + '/' + encodeURIComponent(remoteJid), 'GET'),
-    'v1_msg_get':       () => evoProxy('/message/' + instance + '?remoteJid=' + encodeURIComponent(remoteJid) + '&limit=40', 'GET'),
-  };
-  if (!map[key]) throw new Error('Endpoint desconhecido: ' + key);
-  return map[key]().then(r => _extractMsgs(r));
-}
-
-function _extractMsgs(data) {
-  if (Array.isArray(data)) return data;
-  return data?.messages?.records || data?.messages || data?.data || data?.records || [];
-}
-
-async function _loadWAChatMessages(remoteJid, instance, silent=false) {
-  const msgContainer = document.getElementById('waChatMessages');
-  if (!msgContainer) return;
-  try {
-    const msgs = await _fetchChatMessages(instance, remoteJid);
-
-    if (!msgs.length && !silent) {
-      msgContainer.innerHTML = '<div style="text-align:center;padding:20px;font-family:var(--mono);font-size:10px;color:var(--muted)">Sem mensagens encontradas.<br><span style="color:var(--muted);font-size:9px">Use o botão 🔬 Diagnóstico na aba WhatsApp para verificar a API.</span></div>';
-      return;
-    }
-    if (!msgs.length) return;
-
-    const msgsSorted = [...msgs].sort((a,b) => {
-      const ta = Number(a.messageTimestamp || a.timestamp || 0);
-      const tb = Number(b.messageTimestamp || b.timestamp || 0);
-      return ta - tb;
-    }).slice(-40);
-
-    const wasAtBottom = msgContainer.scrollHeight - msgContainer.scrollTop - msgContainer.clientHeight < 60;
-
-    msgContainer.innerHTML = msgsSorted.map(m => {
-      const fromMe = m.key?.fromMe || m.fromMe;
-      const text = m.message?.conversation || m.message?.extendedTextMessage?.text
-        || m.message?.imageMessage?.caption || m.message?.videoMessage?.caption
-        || m.message?.documentMessage?.title || m.body || m.text || '[mídia]';
-      const ts = m.messageTimestamp || m.timestamp;
-      const timeStr = ts ? new Date((Number(ts)>9999999999 ? Number(ts) : Number(ts)*1000))
-        .toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}) : '';
-      return `<div style="display:flex;flex-direction:column;align-items:${fromMe?'flex-end':'flex-start'};margin-bottom:8px">
-        <div style="max-width:75%;background:${fromMe?'rgba(0,229,160,.12)':'rgba(30,42,53,.8)'};border:1px solid ${fromMe?'rgba(0,229,160,.25)':'var(--border)'};border-radius:${fromMe?'12px 12px 2px 12px':'12px 12px 12px 2px'};padding:8px 12px;font-size:12px;color:var(--text);line-height:1.5">${text}</div>
-        <div style="font-family:var(--mono);font-size:9px;color:var(--muted);margin-top:3px">${timeStr}${fromMe?' · SDR':''}</div>
-      </div>`;
+  function updatePerfPanel(all) {
+    var perfBody = document.querySelector('#tab-dashboard .grid-2 .panel:first-child .panel-body');
+    if (!perfBody) return;
+    var bySDR = {};
+    all.forEach(function(c) {
+      var name = (c.sdr_name || 'SDR').trim();
+      if (!bySDR[name]) bySDR[name] = [];
+      bySDR[name].push(c);
+    });
+    if (!Object.keys(bySDR).length) return;
+    var today = new Date().toLocaleDateString('sv-SE');
+    var html = Object.entries(bySDR).map(function(entry) {
+      var name = entry[0], calls = entry[1];
+      var todayC = calls.filter(function(c){return (c.started_at||c.created_at||'').startsWith(today);});
+      var sc = calls.map(function(c){return parseAIScore(c.ai_analysis);}).filter(Boolean);
+      var avg = sc.length ? Math.round(sc.reduce(function(a,b){return a+b;},0)/sc.length) : 0;
+      var pct = avg * 10;
+      var fill = pct >= 70 ? 'fill-green' : 'fill-orange';
+      var agendou = calls.filter(function(c){return c.result==='Agendou';}).length;
+      var atendeu = calls.filter(function(c){return c.result==='Atendeu';}).length;
+      var convRate = calls.length ? Math.round((agendou/calls.length)*100) : 0;
+      var last = calls[0];
+      var lastTime = last && last.started_at ? new Date(last.started_at).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}) : '—';
+      return '<div class="analysis-card">'
+        + '<div class="analysis-top"><div class="analysis-name">' + name + '</div>'
+        + '<div class="analysis-time">Última: ' + lastTime + ' · ' + todayC.length + ' hoje</div></div>'
+        + '<div class="score-bar-wrap"><div class="score-bar-label"><span>Score IA Médio</span><span>' + (avg||'—') + '/10</span></div>'
+        + '<div class="score-bar"><div class="score-fill ' + fill + '" style="width:' + pct + '%"></div></div></div>'
+        + '<div class="score-bar-wrap"><div class="score-bar-label"><span>Taxa de Agendamento</span><span>' + convRate + '%</span></div>'
+        + '<div class="score-bar"><div class="score-fill fill-blue" style="width:' + convRate + '%"></div></div></div>'
+        + '<div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">'
+        + '<span class="badge-pill pill-green">✅ ' + atendeu + ' atendeu</span>'
+        + '<span class="badge-pill pill-green">📅 ' + agendou + ' agendou</span>'
+        + '<span class="badge-pill">' + calls.length + ' total</span>'
+        + '</div></div>';
     }).join('');
+    perfBody.innerHTML = html;
+  }
 
-    if (!silent || wasAtBottom) msgContainer.scrollTop = msgContainer.scrollHeight;
-  } catch(e) {
-    if (!silent) {
-      msgContainer.innerHTML = `<div style="text-align:center;padding:20px;font-family:var(--mono);font-size:10px;color:var(--danger)">Erro: ${e.message}</div>`;
+  function renderCallsList(calls) {
+    var panel = document.getElementById('__calls-panel');
+    if (!panel) {
+      var grid = document.querySelector('#tab-dashboard .grid-2');
+      if (!grid) return;
+      panel = document.createElement('div');
+      panel.id = '__calls-panel';
+      panel.className = 'panel';
+      panel.innerHTML = '<div class="panel-header"><div class="panel-title">Últimas Ligações</div><div class="panel-badge">AO VIVO</div></div>'
+        + '<div id="__calls-list" class="panel-body" style="padding:0 18px;max-height:300px;overflow-y:auto"></div>';
+      grid.insertAdjacentElement('afterend', panel);
     }
+    var listEl = document.getElementById('__calls-list');
+    if (!listEl || !calls.length) return;
+    var rc = { 'Agendou':'var(--accent)', 'Atendeu':'var(--ms)', 'Não atendeu':'var(--warn)', 'Desqualificado':'var(--danger)' };
+    listEl.innerHTML = calls.map(function(c) {
+      var score = parseAIScore(c.ai_analysis);
+      var time = c.started_at ? new Date(c.started_at).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : '—';
+      var dur = c.duration_seconds ? Math.floor(c.duration_seconds/60)+':'+String(c.duration_seconds%60).padStart(2,'0') : '—';
+      var initials = (c.lead_name||'L').split(' ').map(function(w){return w[0];}).join('').substring(0,2).toUpperCase();
+      var rColor = rc[c.result] || 'var(--muted)';
+      return '<div class="call-item">'
+        + '<div class="call-avatar" style="background:linear-gradient(135deg,#0066ff,#00b4d8)">' + initials + '</div>'
+        + '<div class="call-info">'
+        + '<div class="call-top"><div class="call-name">' + (c.lead_name||'Lead') + ' <span style="font-size:10px;font-weight:400;color:var(--muted)">· ' + (c.sdr_name||'') + '</span></div>'
+        + '<div class="call-time">' + time + ' · ⏱ ' + dur + '</div></div>'
+        + '<div class="call-meta">' + (c.phone||'') + '</div>'
+        + '<div class="call-tags"><span class="tag" style="background:rgba(0,0,0,.3);color:' + rColor + ';border:1px solid ' + rColor + '40">' + (c.result||'—') + '</span>'
+        + (score ? '<span class="tag tag-ok">IA: ' + score + '/10</span>' : '')
+        + '</div></div></div>';
+    }).join('');
   }
-}
 
-// ── DIAGNÓSTICO DE ENDPOINTS ──────────────────────────────────────────
-async function runWADiagnostic() {
-  const btn = event?.target;
-  if (btn) { btn.textContent = '⏳ Testando...'; btn.disabled = true; }
-  const instance = config.evolutionInstance;
-  if (!instance || !config.evolutionUrl) {
-    showToast('Configure a Evolution API primeiro', 'err');
-    if (btn) { btn.textContent = '🔬 Diagnóstico'; btn.disabled = false; }
-    return;
+  function renderAnalysisHistory(calls) {
+    var hist = document.getElementById('analysisHistory');
+    if (!hist || !calls.length) return;
+    hist.innerHTML = calls.map(function(c) {
+      var score = parseAIScore(c.ai_analysis);
+      var pct = score ? score * 10 : 0;
+      var color = pct >= 70 ? 'fill-green' : 'fill-orange';
+      var time = c.started_at ? new Date(c.started_at).toLocaleString('pt-BR') : '—';
+      var summary = (c.ai_analysis||'').split('\n').filter(function(l){return l.trim();}).slice(0,2).join(' · ');
+      return '<div class="analysis-card">'
+        + '<div class="analysis-top"><div class="analysis-name">' + (c.lead_name||'Lead') + ' <span style="font-size:10px;color:var(--muted)">· ' + (c.sdr_name||'') + '</span></div>'
+        + '<div class="analysis-time">' + time + '</div></div>'
+        + '<div class="score-bar-wrap"><div class="score-bar-label"><span>Score IA</span><span>' + (score ? score+'/10' : '—') + '</span></div>'
+        + '<div class="score-bar"><div class="score-fill ' + color + '" style="width:' + pct + '%"></div></div></div>'
+        + '<div style="font-size:10px;color:var(--muted);margin-top:5px;line-height:1.5">' + summary.substring(0,120) + '</div>'
+        + '<div style="margin-top:5px;font-family:var(--mono);font-size:9px;color:' + (c.result==='Agendou'?'var(--accent)':'var(--muted)') + '">'
+        + (c.result||'—') + ' · ⏱ ' + (c.duration_seconds ? Math.floor(c.duration_seconds/60)+'min' : '—') + '</div>'
+        + '</div>';
+    }).join('');
   }
 
-  // Pega o primeiro remoteJid disponível da lista para testar
-  const firstItem = document.querySelector('#waDashConvList .call-item');
-  const testJid = firstItem ? firstItem.getAttribute('onclick')?.match(/'([^']+@[^']+)'/)?.[1] : null;
-
-  const results = [];
-
-  // Testa endpoints de lista de chats
-  const chatEndpoints = [
-    { label: 'GET /chat/findChats', fn: () => evoProxy('/chat/findChats/' + instance) },
-    { label: 'POST /chat/findChats', fn: () => evoProxy('/chat/findChats/' + instance, 'POST', { where:{}, limit:10 }) },
-    { label: 'POST /chat/fetchChats', fn: () => evoProxy('/chat/fetchChats/' + instance, 'POST', { limit:10 }) },
-    { label: 'GET /chat/fetchChats', fn: () => evoProxy('/chat/fetchChats/' + instance) },
-  ];
-
-  for (const ep of chatEndpoints) {
+  // Expõe filterCallsBySDR no window com nome de patch para não colidir
+  window.patchFilterSDR = async function(sdrName) {
     try {
-      const d = await ep.fn();
-      const arr = Array.isArray(d) ? d : (d.chats||d.data||d.conversations||[]);
-      results.push({ label: ep.label, ok: true, info: arr.length + ' chats' });
-    } catch(e) {
-      results.push({ label: ep.label, ok: false, info: e.message.substring(0, 60) });
-    }
-  }
-
-  // Busca JID automaticamente se a lista estava vazia
-  let resolvedJid = testJid;
-  if (!resolvedJid) {
-    try {
-      const d = await evoProxy('/chat/findChats/' + instance, 'GET');
-      const arr = Array.isArray(d) ? d : (d.chats || d.data || []);
-      if (arr.length) resolvedJid = arr[0].id || arr[0].remoteJid || null;
-    } catch(e) {}
-  }
-
-  // Testa endpoints de mensagens
-  if (resolvedJid) {
-    const testJid = resolvedJid;
-    const msgEndpoints = [
-      { label: 'POST /chat/findMessages (where.key)', fn: () => evoProxy('/chat/findMessages/'+instance,'POST',{where:{key:{remoteJid:testJid}},limit:5}) },
-      { label: 'POST /chat/findMessages (flat)', fn: () => evoProxy('/chat/findMessages/'+instance,'POST',{remoteJid:testJid,limit:5}) },
-      { label: 'POST /message/findMessages', fn: () => evoProxy('/message/findMessages/'+instance,'POST',{where:{key:{remoteJid:testJid}},limit:5}) },
-      { label: 'GET /chat/messages/{jid}', fn: () => evoProxy('/chat/messages/'+instance+'/'+encodeURIComponent(testJid)) },
-    ];
-    for (const ep of msgEndpoints) {
-      try {
-        const d = await ep.fn();
-        const arr = _extractMsgs(d);
-        results.push({ label: ep.label, ok: arr.length>0, info: arr.length>0 ? arr.length+' msgs ✓' : 'retornou vazio' });
-      } catch(e) {
-        results.push({ label: ep.label, ok: false, info: e.message.substring(0, 60) });
+      var calls = await sbFetch('ligacoes?sdr_name=eq.' + encodeURIComponent(sdrName) + '&select=*&order=created_at.desc&limit=50');
+      if (Array.isArray(calls)) {
+        renderCallsList(calls.slice(0,10));
+        renderAnalysisHistory(calls.slice(0,20));
       }
-    }
-  }
-
-  // Mostra resultado no painel
-  const list = document.getElementById('waDashConvList');
-  list.innerHTML = `
-    <div style="padding:16px;font-family:var(--mono);font-size:10px">
-      <div style="color:var(--accent);margin-bottom:12px;font-size:11px;font-weight:700">🔬 RESULTADO DO DIAGNÓSTICO</div>
-      <div style="color:var(--muted);margin-bottom:10px">Instância: ${instance} · URL: ${(config.evolutionUrl||'').substring(0,40)}</div>
-      ${testJid ? `<div style="color:var(--muted);margin-bottom:14px">JID de teste: ${testJid.substring(0,30)}...</div>` : '<div style="color:var(--warn);margin-bottom:14px">⚠ Nenhum chat na lista para testar endpoints de mensagens</div>'}
-      ${results.map(r => `
-        <div style="display:flex;align-items:flex-start;gap:8px;padding:7px 0;border-bottom:1px solid var(--border)">
-          <span style="color:${r.ok?'var(--accent)':'var(--danger)'};">${r.ok?'✓':'✗'}</span>
-          <div>
-            <div style="color:${r.ok?'var(--text)':'var(--muted)'};margin-bottom:2px">${r.label}</div>
-            <div style="color:${r.ok?'var(--accent)':'var(--danger)'};font-size:9px">${r.info}</div>
-          </div>
-        </div>`).join('')}
-      <div style="margin-top:14px;display:flex;gap:8px">
-        <button onclick="checkAllChips()" style="background:rgba(0,229,160,.1);border:1px solid rgba(0,229,160,.3);color:var(--accent);padding:6px 12px;border-radius:6px;cursor:pointer;font-family:var(--mono);font-size:9px">↺ Voltar à lista</button>
-      </div>
-    </div>`;
-
-  if (btn) { btn.textContent = '🔬 Diagnóstico'; btn.disabled = false; }
-}
-
-function closeWAChat() {
-  _waChatOpen = null;
-  if (_waRefreshInterval) { clearInterval(_waRefreshInterval); _waRefreshInterval = null; }
-  const modal = document.getElementById('waChatModal');
-  if (modal) modal.classList.remove('active');
-}
-
-async function checkWAStatus() {
-  const instance = document.getElementById('waInstance').value.trim() || config.evolutionInstance;
-  const resultEl = document.getElementById('waResult');
-  try {
-    const res = await fetch(config.evolutionUrl + '/instance/connectionState/' + instance, { headers: evoHeaders() });
-    const data = await res.json();
-    resultEl.style.color = data.state==='open' ? 'var(--accent)' : 'var(--warn)';
-    resultEl.textContent = 'Status "' + instance + '": ' + (data.state || JSON.stringify(data));
-  } catch(e) { resultEl.style.color='var(--danger)'; resultEl.textContent='✗ '+e.message; }
-}
-
-// ====================================================================
-// ANÁLISE IA
-// ====================================================================
-async function analyzeTranscript() {
-  const transcript = document.getElementById('manualTranscript').value.trim();
-  if (!transcript) { showToast('Cole uma transcrição','err'); return; }
-  if (!config.claudeApiKey) { showToast('Configure a chave do Claude','err'); return; }
-  document.getElementById('processingState').classList.add('active');
-  document.getElementById('resultCard').classList.remove('active');
-  const log = document.getElementById('processingLog');
-  log.innerHTML = '';
-  const addLog = msg => { const l=document.createElement('div'); l.className='log-line'; l.textContent=msg; log.appendChild(l); };
-  addLog('Enviando para proxy...');
-  const script = config.qualScript || '1. Dor\n2. Budget\n3. Autoridade\n4. Timeline\n5. Próximo passo';
-  try {
-    const data = await claudeFetch([{
-      role: 'user',
-      content: `Analise esta transcrição de ligação SDR da GFB:\n\nTRANSCRIÇÃO:\n${transcript}\n\nSCRIPT:\n${script}\n\nRetorne APENAS JSON válido:\n{"score":<0-100>,"resumo":"<2 linhas>","pontos_positivos":["..."],"pontos_melhoria":["..."],"etapas_seguidas":<n>,"total_etapas":<n>,"sentimento_lead":"<positivo|neutro|negativo>","proximo_passo":"<ação>"}`
-    }]);
-    addLog('Análise concluída!');
-    const text = data.content?.map(i=>i.text||'').join('').replace(/```json|```/g,'').trim();
-    let result;
-    try { result = JSON.parse(text); }
-    catch { result = { score:65, resumo:text, pontos_positivos:[], pontos_melhoria:[], etapas_seguidas:0, total_etapas:5, sentimento_lead:'neutro', proximo_passo:'Revisar' }; }
-    showResult(result, 'Transcrição Manual');
-    addToAnalysisHistory(result, 'Transcrição Manual');
-  } catch(e) {
-    addLog('Erro: ' + e.message);
-    document.getElementById('processingState').classList.remove('active');
-    showToast(e.message, 'err');
-  }
-}
-
-function handleDrag(e) { e.preventDefault(); document.getElementById('uploadZone').classList.add('dragging'); }
-function handleDrop(e) {
-  e.preventDefault();
-  document.getElementById('uploadZone').classList.remove('dragging');
-  const file = e.dataTransfer.files[0];
-  if (file && file.type.startsWith('audio/')) handleFile(file);
-}
-
-async function handleFile(file) {
-  if (!file) return;
-  if (!config.claudeApiKey) { showToast('Configure a chave do Claude','err'); return; }
-  document.getElementById('uploadZone').style.display = 'none';
-  document.getElementById('processingState').classList.add('active');
-  document.getElementById('resultCard').classList.remove('active');
-  const log = document.getElementById('processingLog');
-  log.innerHTML = '';
-  const addLog = msg => { const l=document.createElement('div'); l.className='log-line'; l.textContent=msg; log.appendChild(l); };
-  addLog('Arquivo: ' + file.name);
-  addLog('Convertendo base64...');
-  const base64 = await fileToBase64(file);
-  addLog('Enviando para proxy → Claude...');
-  const script = config.qualScript || '1. Dor\n2. Budget\n3. Autoridade\n4. Próximo passo';
-  try {
-    const data = await claudeFetch([{ role:'user', content:[
-      { type:'text', text:`Analisador SDR GFB. Script:\n${script}\n\nRetorne APENAS JSON:\n{"score":<0-100>,"resumo":"<2 linhas>","pontos_positivos":["..."],"pontos_melhoria":["..."],"etapas_seguidas":<n>,"total_etapas":<n>,"sentimento_lead":"<positivo|neutro|negativo>","proximo_passo":"<ação>"}` },
-      { type:'document', source:{ type:'base64', media_type: file.type||'audio/mpeg', data: base64 } }
-    ]}]);
-    addLog('Análise concluída!');
-    const text = data.content?.map(i=>i.text||'').join('').replace(/```json|```/g,'').trim();
-    let result;
-    try { result = JSON.parse(text); }
-    catch { result = { score:70, resumo:text, pontos_positivos:[], pontos_melhoria:[], etapas_seguidas:0, total_etapas:5, sentimento_lead:'neutro', proximo_passo:'Revisar' }; }
-    showResult(result, file.name);
-    addToAnalysisHistory(result, file.name);
-  } catch(e) {
-    addLog('Erro: ' + e.message);
-    document.getElementById('uploadZone').style.display = 'block';
-    document.getElementById('processingState').classList.remove('active');
-    showToast(e.message, 'err');
-  }
-}
-
-function showResult(result, filename) {
-  document.getElementById('processingState').classList.remove('active');
-  document.getElementById('resultCard').classList.add('active');
-  document.getElementById('resultScore').textContent = result.score;
-  document.getElementById('resultScore').style.color = result.score>=75?'var(--accent)':result.score>=50?'var(--warn)':'var(--danger)';
-  document.getElementById('resultTitle').textContent = filename || 'Análise';
-  const pos = result.pontos_positivos?.map(p=>'✓ '+p).join('\n')||'';
-  const mel = result.pontos_melhoria?.map(p=>'⚠ '+p).join('\n')||'';
-  document.getElementById('resultContent').innerHTML =
-    `<strong>Resumo:</strong> ${result.resumo}\n<strong>Etapas:</strong> ${result.etapas_seguidas}/${result.total_etapas} | <strong>Sentimento:</strong> ${result.sentimento_lead}\n\n<strong>Pontos positivos:</strong>\n${pos}\n\n<strong>Melhorias:</strong>\n${mel}\n\n<strong>Próximo passo:</strong> ${result.proximo_passo}`;
-  document.getElementById('uploadZone').style.display = 'block';
-}
-
-function addToAnalysisHistory(result, name) {
-  const hist = document.getElementById('analysisHistory');
-  const color = result.score>=75?'fill-green':'fill-orange';
-  const card = document.createElement('div');
-  card.className = 'analysis-card';
-  card.innerHTML = `
-    <div class="analysis-top"><div class="analysis-name">${name}</div><div class="analysis-time">${new Date().toLocaleTimeString('pt-BR')} · Score: ${result.score}</div></div>
-    <div class="score-bar-wrap"><div class="score-bar-label"><span>Score</span><span>${result.score}%</span></div><div class="score-bar"><div class="score-fill ${color}" style="width:${result.score}%"></div></div></div>
-    <div style="font-size:11px;color:var(--muted);margin-top:5px">${result.resumo}</div>`;
-  if (hist.querySelector('.empty-state')) hist.innerHTML = '';
-  hist.prepend(card);
-}
-
-// ====================================================================
-// VISUAL FLOW EDITOR ENGINE
-// ====================================================================
-let feNodes = [];
-let feEdges = [];
-let feSelected = null;
-let feDragNode = null;   // { id, ox, oy } offset do mouse no node
-let feConnecting = null; // { nodeId, port }
-let fePalType = null;    // tipo sendo arrastado da palette
-let feFlowId = null;
-let feFlowCfg = {
-  pipelineId:'', pipelineName:'', stageId:'', stageName:'',
-  active: true,
-  bh: { enabled:true, start:'09:00', end:'18:00' }
-};
-
-const FE_COLOR = { start:'#00e5a0', mensagem:'#0066ff', esperar:'#ff6b35', condicao:'#7c3aed', acao_rd:'#ff2d55', fim:'#4a6070' };
-const FE_LABEL = { start:'INÍCIO', mensagem:'MENSAGEM WA', esperar:'AGUARDAR', condicao:'CONDIÇÃO', acao_rd:'AÇÃO CRM', fim:'FIM' };
-const FE_ICON  = { start:'🚀', mensagem:'💬', esperar:'⏱', condicao:'🔀', acao_rd:'📋', fim:'🏁' };
-
-function feDefaultData(type) {
-  return { start:{}, mensagem:{ message:'', respectBH:true }, esperar:{ amount:1, unit:'dias' },
-           condicao:{ keyword:'' }, acao_rd:{ action:'mover_etapa', stageId:'' }, fim:{} }[type] || {};
-}
-
-// ── RENDER ─────────────────────────────────────────────────────────
-function feRender() { feRenderNodes(); feRenderEdges(); }
-
-function feNodeHTML(n) {
-  const c = FE_COLOR[n.type], sel = feSelected === n.id;
-  let body = '';
-  if (n.type === 'start') {
-    const s = rdStages.find(st => st.id === feFlowCfg.stageId);
-    body = s ? `<span style="color:var(--text)">Gatilho: ${s.name}</span>` : '<span style="color:var(--muted)">Configure o funil e etapa</span>';
-  } else if (n.type === 'mensagem') {
-    const bh = n.data.respectBH !== false;
-    const preview = n.data.message ? `"${n.data.message.substring(0,45)}${n.data.message.length>45?'…':''}"` : '<em style="color:var(--muted)">Clique para editar...</em>';
-    body = `${preview}<div class="bh-badge ${bh?'bh-on':'bh-off'}">${bh?'⏰ Horário comercial':'🌙 Qualquer hora'}</div>`;
-  } else if (n.type === 'esperar') {
-    body = `⏱ ${n.data.amount||1} ${n.data.unit||'dias'}`;
-  } else if (n.type === 'condicao') {
-    body = n.data.keyword ? `Resposta contém: <strong style="color:var(--text)">"${n.data.keyword}"</strong>` : '<em style="color:var(--muted)">Defina a palavra-chave</em>';
-  } else if (n.type === 'acao_rd') {
-    const acts = { mover_etapa:'Mover card de etapa', atualizar_descricao:'Atualizar descrição', ambos:'Mover + atualizar' };
-    const s = rdStages.find(st => st.id === n.data.stageId);
-    body = `${acts[n.data.action]||'Mover card'}${s?`<br><strong style="color:var(--text)">→ ${s.name}</strong>`:''}`;
-  } else if (n.type === 'fim') {
-    body = 'Fim da cadência';
-  }
-
-  const hasIn = n.type !== 'start';
-  const isCond = n.type === 'condicao';
-  const hasOut = n.type !== 'fim' && !isCond;
-
-  return `<div class="fe-node${sel?' fe-selected':''}" id="${n.id}" style="left:${n.x}px;top:${n.y}px"
-    onmousedown="feNodeMD(event,'${n.id}')">
-    <div class="fe-nh" style="background:rgba(${feHexRgb(c)},.14)">
-      <span style="font-size:14px">${FE_ICON[n.type]}</span>
-      <span class="fe-nt" style="color:${c}">${FE_LABEL[n.type]}</span>
-      <button class="fe-ndel" onclick="event.stopPropagation();feDeleteNode('${n.id}')">✕</button>
-    </div>
-    <div class="fe-nb">${body}</div>
-    ${hasIn?`<div class="fe-port fe-pi" onmousedown="event.stopPropagation()" onmouseup="event.stopPropagation();fePortUp(event,'${n.id}','in')"></div>`:''}
-    ${hasOut?`<div class="fe-port fe-po" style="background:${c};border-color:${c}" onmousedown="event.stopPropagation();fePortDown(event,'${n.id}','out')"></div>`:''}
-    ${isCond?`
-      <div class="fe-port fe-po-y" style="background:#00e5a0;border-color:#00e5a0" onmousedown="event.stopPropagation();fePortDown(event,'${n.id}','yes')"></div>
-      <div class="fe-port fe-po-n" style="background:#ff2d55;border-color:#ff2d55" onmousedown="event.stopPropagation();fePortDown(event,'${n.id}','no')"></div>
-      <div class="fe-plbl fe-plbl-y">SIM</div>
-      <div class="fe-plbl fe-plbl-n">NÃO</div>`:''}
-  </div>`;
-}
-
-function feRenderNodes() {
-  const layer = document.getElementById('feNodesLayer');
-  if (!layer) return;
-  layer.innerHTML = feNodes.map(n => feNodeHTML(n)).join('');
-  const empty = document.getElementById('feCanvasEmpty');
-  if (empty) empty.style.display = feNodes.length ? 'none' : 'block';
-}
-
-function fePortCenter(nodeId, port) {
-  const el = document.getElementById(nodeId);
-  const wrap = document.getElementById('feCanvasWrap');
-  if (!el || !wrap) return { x:0, y:0 };
-  const nr = el.getBoundingClientRect();
-  const wr = wrap.getBoundingClientRect();
-  const nx = nr.left - wr.left, ny = nr.top - wr.top;
-  const w = nr.width, h = nr.height;
-  if (port === 'in')  return { x: nx, y: ny + h/2 };
-  if (port === 'out') return { x: nx + w, y: ny + h/2 };
-  if (port === 'yes') return { x: nx + w, y: ny + h*0.32 };
-  if (port === 'no')  return { x: nx + w, y: ny + h*0.68 };
-  return { x:0, y:0 };
-}
-
-function feEdgePath(x1,y1,x2,y2) {
-  const dx = Math.abs(x2-x1)*0.55 + 30;
-  return `M${x1},${y1} C${x1+dx},${y1} ${x2-dx},${y2} ${x2},${y2}`;
-}
-
-function feRenderEdges() {
-  const g = document.getElementById('feEdgesG');
-  if (!g) return;
-  g.innerHTML = feEdges.map(e => {
-    const fromPt = fePortCenter(e.from, e.fromPort);
-    const toPt   = fePortCenter(e.to,   'in');
-    const marker = e.fromPort === 'yes' ? '#mGreen' : e.fromPort === 'no' ? '#mRed' : '#mGray';
-    const stroke = e.fromPort === 'yes' ? '#00e5a0' : e.fromPort === 'no' ? '#ff2d55' : '#1e2a35';
-    return `<path d="${feEdgePath(fromPt.x,fromPt.y,toPt.x,toPt.y)}"
-      fill="none" stroke="${stroke}" stroke-width="2" marker-end="url(${marker})"
-      style="cursor:pointer" onclick="feDeleteEdge('${e.id}')" title="Clique para remover"/>`;
-  }).join('');
-}
-
-function feHexRgb(hex) {
-  const h = hex.replace('#','');
-  return [parseInt(h.slice(0,2),16),parseInt(h.slice(2,4),16),parseInt(h.slice(4,6),16)].join(',');
-}
-
-// ── CREATE NODE ─────────────────────────────────────────────────────
-function feCreateNode(type, x, y) {
-  const id = 'n' + Date.now();
-  feNodes.push({ id, type, x, y, data: feDefaultData(type) });
-  feRender();
-  feSelectNode(id);
-  return id;
-}
-
-function feDeleteNode(id) {
-  feNodes = feNodes.filter(n => n.id !== id);
-  feEdges = feEdges.filter(e => e.from !== id && e.to !== id);
-  if (feSelected === id) { feSelected = null; feShowProps(null); }
-  feRender();
-}
-
-function feDeleteEdge(id) {
-  feEdges = feEdges.filter(e => e.id !== id);
-  feRenderEdges();
-}
-
-// ── SELECT + PROPS ─────────────────────────────────────────────────
-function feSelectNode(id) {
-  feSelected = id;
-  feRenderNodes();
-  feRenderEdges();
-  feShowProps(id);
-}
-
-function feShowProps(id) {
-  const panel = document.getElementById('feProps');
-  if (!panel) return;
-  if (!id) {
-    panel.innerHTML = '<div style="text-align:center;padding:30px 10px;color:var(--muted)"><div style="font-size:30px;margin-bottom:8px">◈</div><div style="font-size:11px">Clique em um node para editar</div></div>';
-    return;
-  }
-  const node = feNodes.find(n => n.id === id);
-  if (!node) return;
-  const c = FE_COLOR[node.type];
-
-  let props = `<div class="fe-props-title" style="color:${c}">${FE_ICON[node.type]} ${FE_LABEL[node.type]}</div>`;
-
-  if (node.type === 'mensagem') {
-    props += `
-      <div class="form-group">
-        <label class="form-label">Mensagem WhatsApp</label>
-        <textarea class="form-textarea" style="min-height:100px" oninput="feUpd('${id}','message',this.value)"
-          placeholder="Olá {{nome}}, tudo bem? Vi que você se inscreveu...">${node.data.message||''}</textarea>
-      </div>
-      <div class="form-group">
-        <label class="form-label">Horário Comercial</label>
-        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:11px;color:var(--muted)">
-          <input type="checkbox" ${node.data.respectBH!==false?'checked':''} onchange="feUpd('${id}','respectBH',this.checked);feRender()">
-          Respeitar horário configurado
-        </label>
-        <div style="font-family:var(--mono);font-size:9px;color:var(--muted);margin-top:4px">
-          Se marcado, mensagens fora do horário serão enfileiradas
-        </div>
-      </div>
-      <div class="form-group">
-        <label class="form-label">Atraso antes de enviar (segundos)</label>
-        <input type="number" class="form-input" value="${node.data.delay||0}" min="0"
-          oninput="feUpd('${id}','delay',+this.value)">
-      </div>`;
-  } else if (node.type === 'esperar') {
-    props += `
-      <div class="form-group">
-        <label class="form-label">Aguardar por</label>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-          <input type="number" class="form-input" value="${node.data.amount||1}" min="1"
-            oninput="feUpd('${id}','amount',+this.value);feRender()">
-          <select class="form-select" onchange="feUpd('${id}','unit',this.value);feRender()">
-            <option value="minutos" ${node.data.unit==='minutos'?'selected':''}>Minutos</option>
-            <option value="horas" ${node.data.unit==='horas'?'selected':''}>Horas</option>
-            <option value="dias" ${!node.data.unit||node.data.unit==='dias'?'selected':''}>Dias</option>
-          </select>
-        </div>
-        <div style="font-family:var(--mono);font-size:9px;color:var(--muted);margin-top:4px">
-          ⏰ Conta dentro do horário comercial quando ativado
-        </div>
-      </div>`;
-  } else if (node.type === 'condicao') {
-    props += `
-      <div class="form-group">
-        <label class="form-label">Se a resposta do lead contiver</label>
-        <input type="text" class="form-input" value="${node.data.keyword||''}"
-          placeholder="Ex: sim, quero, interessado"
-          oninput="feUpd('${id}','keyword',this.value);feRender()">
-        <div style="font-family:var(--mono);font-size:9px;color:var(--muted);margin-top:4px">
-          Porta <span style="color:#00e5a0">SIM</span> → contém · Porta <span style="color:#ff2d55">NÃO</span> → não contém
-        </div>
-      </div>`;
-  } else if (node.type === 'acao_rd') {
-    const stageOpts = rdStages.map(s =>
-      `<option value="${s.id}" ${node.data.stageId===s.id?'selected':''}>${s.pipelineName?s.pipelineName+' → ':''} ${s.name}</option>`
-    ).join('');
-    props += `
-      <div class="form-group">
-        <label class="form-label">Ação no RD Station</label>
-        <select class="form-select" onchange="feUpd('${id}','action',this.value);feRender()">
-          <option value="mover_etapa" ${node.data.action==='mover_etapa'?'selected':''}>Mover card de etapa</option>
-          <option value="atualizar_descricao" ${node.data.action==='atualizar_descricao'?'selected':''}>Atualizar descrição</option>
-          <option value="ambos" ${node.data.action==='ambos'?'selected':''}>Mover + atualizar</option>
-        </select>
-      </div>
-      ${node.data.action!=='atualizar_descricao'?`
-      <div class="form-group">
-        <label class="form-label">Etapa de destino</label>
-        <select class="form-select" onchange="feUpd('${id}','stageId',this.value);feRender()">
-          <option value="">Selecione...</option>${stageOpts}
-        </select>
-      </div>`:''}
-      ${node.data.action!=='mover_etapa'?`
-      <div class="form-group">
-        <label class="form-label">Template da descrição</label>
-        <textarea class="form-textarea" style="min-height:70px"
-          oninput="feUpd('${id}','descTemplate',this.value)"
-          placeholder="Resposta em {{data}}: {{resposta}}">${node.data.descTemplate||''}</textarea>
-      </div>`:''}`;
-  } else if (node.type === 'start') {
-    props += `<div style="font-size:11px;color:var(--muted);line-height:1.7">
-      Este node dispara o fluxo quando um lead entrar na etapa gatilho configurada no painel esquerdo.</div>`;
-  } else if (node.type === 'fim') {
-    props += `<div style="font-size:11px;color:var(--muted)">Fim da sequência. O lead sai da cadência.</div>`;
-  }
-
-  panel.innerHTML = props;
-}
-
-function feUpd(id, key, val) {
-  const node = feNodes.find(n => n.id === id);
-  if (node) node.data[key] = val;
-}
-
-// ── DRAG NODES ──────────────────────────────────────────────────────
-function feNodeMD(e, id) {
-  if (e.button !== 0) return;
-  feSelectNode(id);
-  const el = document.getElementById(id);
-  const wrap = document.getElementById('feCanvasWrap');
-  if (!el || !wrap) return;
-  const nr = el.getBoundingClientRect();
-  const wr = wrap.getBoundingClientRect();
-  feDragNode = { id, ox: e.clientX - (nr.left - wr.left), oy: e.clientY - (nr.top - wr.top) };
-  e.preventDefault();
-}
-
-function feCanvasMD(e) {
-  if (e.target === document.getElementById('feCanvasWrap') || e.target === document.getElementById('feNodesLayer')) {
-    feSelected = null;
-    feRenderNodes();
-    feShowProps(null);
-  }
-}
-
-function feCanvasMM(e) {
-  const wrap = document.getElementById('feCanvasWrap');
-  if (!wrap) return;
-  const wr = wrap.getBoundingClientRect();
-  const mx = e.clientX - wr.left;
-  const my = e.clientY - wr.top;
-
-  if (feDragNode) {
-    const node = feNodes.find(n => n.id === feDragNode.id);
-    if (node) {
-      node.x = mx - feDragNode.ox;
-      node.y = my - feDragNode.oy;
-      const el = document.getElementById(node.id);
-      if (el) { el.style.left = node.x + 'px'; el.style.top = node.y + 'px'; }
-      feRenderEdges();
-    }
-  }
-
-  if (feConnecting) {
-    const prev = fePortCenter(feConnecting.nodeId, feConnecting.port);
-    const preview = document.getElementById('fePreview');
-    if (preview) {
-      preview.setAttribute('d', feEdgePath(prev.x, prev.y, mx, my));
-      preview.style.display = 'block';
-    }
-  }
-}
-
-function feCanvasMU(e) {
-  feDragNode = null;
-  if (feConnecting) {
-    feConnecting = null;
-    const preview = document.getElementById('fePreview');
-    if (preview) preview.style.display = 'none';
-  }
-}
-
-// ── PORT CONNECTIONS ─────────────────────────────────────────────────
-function fePortDown(e, nodeId, port) {
-  e.preventDefault();
-  feConnecting = { nodeId, port };
-}
-
-function fePortUp(e, nodeId, port) {
-  e.preventDefault();
-  if (!feConnecting || feConnecting.nodeId === nodeId) {
-    feConnecting = null;
-    const preview = document.getElementById('fePreview');
-    if (preview) preview.style.display = 'none';
-    return;
-  }
-  // Cria edge
-  feEdges.push({
-    id: 'e' + Date.now(),
-    from: feConnecting.nodeId,
-    fromPort: feConnecting.port,
-    to: nodeId
-  });
-  feConnecting = null;
-  const preview = document.getElementById('fePreview');
-  if (preview) preview.style.display = 'none';
-  feRenderEdges();
-}
-
-// ── PALETTE DRAG ─────────────────────────────────────────────────────
-function fePalDrag(e, type) {
-  fePalType = type;
-  e.dataTransfer.setData('text/plain', type);
-}
-
-function feCanvasDrop(e) {
-  e.preventDefault();
-  const type = fePalType || e.dataTransfer.getData('text/plain');
-  if (!type) return;
-  const wrap = document.getElementById('feCanvasWrap');
-  const wr = wrap.getBoundingClientRect();
-  const x = e.clientX - wr.left - 95;
-  const y = e.clientY - wr.top - 30;
-  feCreateNode(type, Math.max(10, x), Math.max(10, y));
-  fePalType = null;
-}
-
-// ── PIPELINE / STAGE selects ─────────────────────────────────────────
-function feOnPipelineChange() {
-  const pid = document.getElementById('feFlowPipeline').value;
-  const p = GFB_PIPELINES.find(p => p.id === pid);
-  feFlowCfg.pipelineId = pid;
-  feFlowCfg.pipelineName = p?.name || '';
-  document.getElementById('feInfoPipeline').textContent = p?.name || '';
-
-  const stageSel = document.getElementById('feFlowStage');
-  stageSel.innerHTML = '<option value="">Selecione a etapa gatilho...</option>';
-  if (pid) {
-    stageSel.disabled = false;
-    rdStages.filter(s => s.pipelineId === pid).forEach(s => {
-      const o = document.createElement('option');
-      o.value = s.id; o.textContent = s.name; stageSel.appendChild(o);
-    });
-    stageSel.onchange = () => {
-      feFlowCfg.stageId = stageSel.value;
-      const st = rdStages.find(s => s.id === stageSel.value);
-      feFlowCfg.stageName = st?.name || '';
-      document.getElementById('feInfoStage').textContent = st ? '→ ' + st.name : '';
-      feRenderNodes(); // atualiza node start
-    };
-  } else {
-    stageSel.disabled = true;
-  }
-}
-
-function feSetActive(val) {
-  document.getElementById('feFlowActive').value = val ? 'true' : 'false';
-  feFlowCfg.active = val;
-  document.getElementById('feBtnOn').className = 'fe-toggle-btn' + (val ? ' on' : '');
-  document.getElementById('feBtnOff').className = 'fe-toggle-btn' + (!val ? ' pause' : '');
-}
-
-function feToggleBH() {
-  const enabled = document.getElementById('feBHEnabled').checked;
-  feFlowCfg.bh.enabled = enabled;
-  document.getElementById('feBHConfig').style.opacity = enabled ? '1' : '.4';
-}
-
-// ── OPEN / CLOSE / SAVE ──────────────────────────────────────────────
-function openFlowEditor(flowId) {
-  // Reset state
-  feNodes = []; feEdges = []; feSelected = null;
-  feDragNode = null; feConnecting = null;
-  feFlowId = flowId;
-
-  // Preenche palette pipeline select
-  const psel = document.getElementById('feFlowPipeline');
-  psel.innerHTML = '<option value="">Selecione o funil...</option>';
-  GFB_PIPELINES.forEach(p => {
-    const o = document.createElement('option'); o.value = p.id; o.textContent = p.name; psel.appendChild(o);
-  });
-
-  const flow = flowId ? flows.find(f => f.id === flowId) : null;
-
-  document.getElementById('flowName').value = flow?.name || '';
-  document.getElementById('feInfoPipeline').textContent = '';
-  document.getElementById('feInfoStage').textContent = '';
-
-  if (flow) {
-    // Carrega config
-    feFlowCfg = {
-      pipelineId: flow.pipelineId || '',
-      pipelineName: flow.pipelineName || '',
-      stageId: flow.triggerStage || '',
-      stageName: flow.stageName || '',
-      active: flow.active !== false,
-      bh: flow.bh || { enabled:true, start:'09:00', end:'18:00' }
-    };
-
-    // Seta pipeline select
-    psel.value = feFlowCfg.pipelineId;
-    feOnPipelineChange();
-    setTimeout(() => {
-      const stageSel = document.getElementById('feFlowStage');
-      if (stageSel) stageSel.value = feFlowCfg.stageId;
-      document.getElementById('feInfoPipeline').textContent = feFlowCfg.pipelineName;
-      document.getElementById('feInfoStage').textContent = feFlowCfg.stageName ? '→ ' + feFlowCfg.stageName : '';
-    }, 50);
-
-    // Carrega nodes e edges
-    feNodes = JSON.parse(JSON.stringify(flow.nodes || []));
-    feEdges = JSON.parse(JSON.stringify(flow.edges || []));
-
-    // BH
-    document.getElementById('feBHEnabled').checked = feFlowCfg.bh.enabled;
-    document.getElementById('feBHStart').value = feFlowCfg.bh.start || '09:00';
-    document.getElementById('feBHEnd').value = feFlowCfg.bh.end || '18:00';
-    document.getElementById('feBHConfig').style.opacity = feFlowCfg.bh.enabled ? '1' : '.4';
-  } else {
-    feFlowCfg = { pipelineId:'', pipelineName:'', stageId:'', stageName:'', active:true, bh:{ enabled:true, start:'09:00', end:'18:00' } };
-    // Cria node start inicial
-    setTimeout(() => feCreateNode('start', 60, 120), 100);
-  }
-
-  feSetActive(feFlowCfg.active);
-  document.getElementById('flowEditor').classList.add('active');
-
-  setTimeout(() => { feRender(); feShowProps(null); }, 80);
-}
-
-function closeFlowEditor() {
-  document.getElementById('flowEditor').classList.remove('active');
-  feNodes = []; feEdges = []; feSelected = null;
-}
-
-function saveFlow() {
-  const name = document.getElementById('flowName').value.trim();
-  if (!name) { showToast('Dê um nome ao fluxo', 'err'); return; }
-  if (!feFlowCfg.pipelineId) { showToast('Selecione o funil', 'err'); return; }
-  if (!feFlowCfg.stageId) { showToast('Selecione a etapa gatilho', 'err'); return; }
-
-  feFlowCfg.bh.start = document.getElementById('feBHStart').value;
-  feFlowCfg.bh.end = document.getElementById('feBHEnd').value;
-
-  const flow = {
-    id: feFlowId || 'flow_' + Date.now(),
-    name,
-    pipelineId: feFlowCfg.pipelineId,
-    pipelineName: feFlowCfg.pipelineName,
-    triggerStage: feFlowCfg.stageId,
-    stageName: feFlowCfg.stageName,
-    active: feFlowCfg.active,
-    bh: { ...feFlowCfg.bh },
-    nodes: JSON.parse(JSON.stringify(feNodes)),
-    edges: JSON.parse(JSON.stringify(feEdges)),
-    updatedAt: new Date().toISOString()
+    } catch(e) { console.warn('[patchFilterSDR]', e); }
   };
 
-  if (feFlowId) {
-    const idx = flows.findIndex(f => f.id === feFlowId);
-    if (idx >= 0) flows[idx] = flow; else flows.push(flow);
-  } else {
-    flows.push(flow);
-  }
-
-  LS.set('flows', JSON.stringify(flows));
-  renderFlows();
-  renderRDStages();
-  closeFlowEditor();
-  showToast('Fluxo "' + name + '" salvo!', 'ok');
-}
-
-// ── FLOWS LIST RENDER ────────────────────────────────────────────────
-function renderFlows() {
-  const list = document.getElementById('flowList');
-  const badge = document.getElementById('flowCount');
-  badge.textContent = flows.length + ' FLUXO' + (flows.length!==1?'S':'');
-  if (!flows.length) {
-    list.innerHTML='<div class="empty-state"><div class="empty-icon">⬡</div><div class="empty-title">Nenhum fluxo criado</div><div class="empty-sub">Clique em "+ Novo Fluxo" para criar.</div></div>';
-    return;
-  }
-  list.innerHTML = flows.map(f => {
-    const stage = rdStages.find(s => s.id === f.triggerStage);
-    const nodeCount = f.nodes?.length || 0;
-    const bh = f.bh?.enabled !== false;
-    return `<div class="flow-item ${feFlowId===f.id?'active-flow':''}" onclick="openFlowEditor('${f.id}')">
-      <div class="flow-item-header">
-        <div>
-          <div class="flow-name">${f.name}</div>
-          <div style="font-family:var(--mono);font-size:9px;color:var(--muted);margin-top:2px">${f.pipelineName||''}</div>
-        </div>
-        <div style="display:flex;gap:5px;align-items:center">
-          <span class="badge-pill ${f.active?'pill-green':'pill-orange'}">${f.active?'● ATIVO':'○ PAUSADO'}</span>
-          <button class="btn-danger" style="font-size:9px;padding:3px 7px" onclick="event.stopPropagation();deleteFlow('${f.id}')">✕</button>
-        </div>
-      </div>
-      <div class="flow-trigger"><span>⬡ Gatilho:</span><span>${stage?stage.name:f.triggerStage||'Não definido'}</span></div>
-      <div style="display:flex;gap:6px;margin-top:7px;flex-wrap:wrap">
-        <span class="badge-pill" style="background:rgba(0,102,255,.1);color:#4d9fff">${nodeCount} nodes</span>
-        <span class="badge-pill ${bh?'pill-green':''}" style="${!bh?'background:rgba(74,96,112,.1);color:var(--muted)':''}">${bh?'⏰ Horário comercial':'🌙 Sem restrição'}</span>
-      </div>
-    </div>`;
-  }).join('');
-}
-
-
-// renderRDStages — exibe etapas agrupadas por funil na aba Fluxos
-function renderRDStages() {
-  const list = document.getElementById('rdStagesList');
-  const badge = document.getElementById('rdStagesBadge');
-  if (!list) return;
-  if (!rdStages.length) {
-    list.innerHTML = '<div class="empty-state" style="padding:14px"><div class="empty-sub">Conecte o RD Station para ver as etapas.</div></div>';
-    if (badge) badge.textContent = '—';
-    return;
-  }
-  if (badge) badge.textContent = rdStages.length + ' ETAPAS';
-  const colors = ['#00e5a0','#0066ff','#ff6b35','#ff2d55','#7c3aed','#4d9fff'];
-  const byPipeline = {};
-  rdStages.forEach(s => {
-    const key = s.pipelineName || 'Funil';
-    if (!byPipeline[key]) byPipeline[key] = [];
-    byPipeline[key].push(s);
+  // ================================================================
+  // INIT PATCH — usa DOMContentLoaded, NÃO sobrescreve window.onload
+  // Isso garante que os event listeners do HTML original funcionem
+  // ================================================================
+  document.addEventListener('DOMContentLoaded', function() {
+    // Aguarda 800ms para o init original do sdr-command.html terminar
+    setTimeout(function() {
+      loadLigacoesData();
+      setInterval(loadLigacoesData, 30000);
+    }, 800);
   });
-  let html = '';
-  Object.entries(byPipeline).forEach(([pname, stages]) => {
-    html += '<div style="margin-bottom:14px">';
-    html += '<div style="font-family:var(--mono);font-size:9px;letter-spacing:1px;color:var(--accent);margin-bottom:8px;text-transform:uppercase">' + pname + '</div>';
-    html += '<div class="stages-list">';
-    stages.forEach((s, i) => {
-      const linked = flows.filter(f => f.triggerStage === s.id);
-      html += '<div class="stage-item">';
-      html += '<div class="stage-dot" style="background:' + colors[i % colors.length] + '"></div>';
-      html += '<div class="stage-name">' + s.name + '</div>';
-      html += '<div class="stage-flow-link">' + (linked.length ? linked.map(f=>f.name).join(', ') : 'sem fluxo') + '</div>';
-      html += '</div>';
-    });
-    html += '</div></div>';
-  });
-  list.innerHTML = html;
-}
 
-// populateStageTriggerSelect — mantida para compatibilidade
-function populateStageTriggerSelect() {
-  // No visual editor, stages are loaded via feOnPipelineChange()
-  // This is kept for backward compatibility
-}
-
-function deleteFlow(id) {
-  if (!confirm('Deletar este fluxo?')) return;
-  flows = flows.filter(f => f.id !== id);
-  LS.set('flows', JSON.stringify(flows));
-  renderFlows();
-  renderRDStages();
-}
-
-
-// ====================================================================
-// INLINE INTEGRATIONS
-// ====================================================================
-function toggleInt(key) {
-  const body = document.getElementById('intBody_'+key);
-  const chevron = document.getElementById('chevron_'+key);
-  const open = body.style.display==='none';
-  body.style.display = open ? 'block' : 'none';
-  if (chevron) chevron.className = 'int-chevron'+(open?' open':'');
-  if (open) prefillInlineFields(key);
-}
-
-function prefillInlineFields(key) {
-  const map = {
-    claude:    [['i_claudeApiKey','claudeApiKey'],['i_qualScript','qualScript']],
-    rd:        [['i_rdApiToken','rdApiToken'],['i_rdPipelineId','rdPipelineId']],
-    supabase:  [['i_supabaseUrl','supabaseUrl'],['i_supabaseKey','supabaseKey']],
-    evolution: [['i_evolutionUrl','evolutionUrl'],['i_evolutionToken','evolutionToken'],['i_evolutionInstance','evolutionInstance']]
-  };
-  (map[key]||[]).forEach(([elId,cfgKey])=>{ const el=document.getElementById(elId); if(el&&config[cfgKey]) el.value=config[cfgKey]; });
-}
-
-async function saveAndTest(key) {
-  const resultEl = document.getElementById('inlineResult_'+key);
-  const storageMap = {
-    claude:    [['i_claudeApiKey','claudeApiKey','claude_key'],['i_qualScript','qualScript','qual_script']],
-    rd:        [['i_rdApiToken','rdApiToken','rd_api_token'],['i_rdPipelineId','rdPipelineId','rd_pipeline_id']],
-    supabase:  [['i_supabaseUrl','supabaseUrl','sb_url'],['i_supabaseKey','supabaseKey','sb_key']],
-    evolution: [['i_evolutionUrl','evolutionUrl','evolution_url'],['i_evolutionToken','evolutionToken','evolution_token'],['i_evolutionInstance','evolutionInstance','evolution_instance']]
-  };
-  (storageMap[key]||[]).forEach(([elId,cfgKey,lsKey])=>{ const el=document.getElementById(elId); if(el!==null){config[cfgKey]=el.value; LS.set(lsKey,el.value);} });
-  resultEl.textContent='⏳ Testando...'; resultEl.style.color='var(--warn)';
-  const tests={claude:_testClaude, rd:_testRD, supabase:_testSupabase, evolution:_testEvolution};
-  if(tests[key]) await tests[key](resultEl);
-}
-
-function setStatus(id, ok, label) {
-  const el = document.getElementById(id);
-  if (!el) return;
-  el.textContent = ok ? (label||'CONECTADO') : 'DESCONECTADO';
-  el.className = 'integration-status '+(ok?'connected':'disconnected');
-}
-
-// ====================================================================
-// CONFIG
-// ====================================================================
-function openConfig() { document.getElementById('configPanel').classList.add('active'); }
-function closeConfig() { document.getElementById('configPanel').classList.remove('active'); }
-
-function saveConfig() {
-  const el = document.getElementById('serverUrl');
-  if (el) { config.serverUrl = el.value; LS.set('server_url', el.value); }
-  updateWebhookUrls();
-  closeConfig();
-  showToast('Configurações salvas!', 'ok');
-}
-
-function updateWebhookUrls() {
-  const base = config.serverUrl || window.location.origin;
-  const wh = document.getElementById('webhookUrl');
-  const pu = document.getElementById('proxyUrl');
-  if (wh) wh.textContent = base + '/webhook/rd-station';
-  if (pu) pu.textContent = base + '/api/proxy';
-}
-
-function updateStatuses() {
-  setStatus('claudeStatus', !!config.claudeApiKey);
-  setStatus('rdStatus', !!config.rdApiToken, config.rdApiToken ? 'CONECTADO' : 'DESCONECTADO');
-  setStatus('supabaseStatus', !!(config.supabaseUrl && config.supabaseKey));
-  setStatus('evolutionStatus', !!(config.evolutionUrl && config.evolutionToken));
-  if (config.claudeApiKey) document.querySelector('.status-text').textContent = 'CLAUDE ATIVO';
-  if (config.claudeApiKey && config.rdApiToken) document.querySelector('.status-text').textContent = 'SISTEMA ATIVO';
-}
-
-// Verifica se o proxy está acessível
-async function checkProxy() {
-  const badge = document.getElementById('proxyBadge');
-  try {
-    const res = await fetch('/api/proxy', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ service: '__ping__' })
-    });
-    // 400 = proxy respondeu (serviço desconhecido é ok, significa que o proxy funciona)
-    if (res.status === 400 || res.ok) {
-      badge.textContent = 'ONLINE ✓';
-      badge.style.background = 'rgba(0,229,160,.1)';
-      badge.style.color = 'var(--accent)';
-    } else {
-      badge.textContent = 'ERRO ' + res.status;
-    }
-  } catch(e) {
-    badge.textContent = 'NÃO ENCONTRADO';
-    badge.style.background = 'rgba(255,45,85,.1)';
-    badge.style.color = 'var(--danger)';
-  }
-}
-
-// ====================================================================
-// UTILS
-// ====================================================================
-function setNav(el, tab) {
-  document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
-  el.classList.add('active');
-  document.querySelectorAll('.tab-content[id^="tab-"]').forEach(t=>t.classList.remove('active'));
-  const t = document.getElementById('tab-'+tab);
-  if (t) t.classList.add('active');
-}
-
-function selectSDR(el) { document.querySelectorAll('.sdr-card').forEach(c=>c.classList.remove('active')); el.classList.add('active'); }
-
-function fileToBase64(file) {
-  return new Promise((resolve,reject) => { const r=new FileReader(); r.onload=()=>resolve(r.result.split(',')[1]); r.onerror=reject; r.readAsDataURL(file); });
-}
-
-function copyWebhook(el) {
-  const text = el.textContent;
-  navigator.clipboard.writeText(text).then(()=>{ const orig=el.textContent; el.textContent='✓ Copiado!'; setTimeout(()=>el.textContent=orig,1500); });
-}
-
-function addDispatchLog(msg) {
-  const log = document.getElementById('dispatchLog');
-  if (!log) return;
-  const line = document.createElement('div');
-  line.className = 'log-line';
-  line.textContent = '['+new Date().toLocaleTimeString('pt-BR')+'] '+msg;
-  log.appendChild(line);
-  log.scrollTop = log.scrollHeight;
-}
-
-function showToast(msg, type='ok') {
-  const t = document.getElementById('toast');
-  t.textContent = (type==='ok'?'✓ ':'✗ ')+msg;
-  t.className = 'toast toast-'+type+' show';
-  setTimeout(()=>t.classList.remove('show'), 3000);
-}
-
-// ====================================================================
-// INIT
-// ====================================================================
-window.onload = async () => {
-  updateStatuses();
-  updateWebhookUrls();
-  renderFlows();
-  checkProxy();
-  document.getElementById('serverUrl').value = config.serverUrl || '';
-
-  // Inicializa o painel WhatsApp ao vivo automaticamente
-  if (config.evolutionUrl && config.evolutionToken) {
-    setTimeout(() => checkAllChips(), 500);
-
-    // Auto-refresh a cada 8s — conversas sempre atualizadas
-    setInterval(() => {
-      if (!config.evolutionUrl || !config.evolutionToken) return;
-      const instance = config.evolutionInstance;
-      if (instance) loadWAConversations(instance);
-      else checkAllChips();
-    }, 8000);
-  }
-
-  // Invalida cache antigo sem pipelineName e re-busca sempre que tiver token
-  const hasOldCache = rdStages.length && !rdStages[0].pipelineName;
-  if (config.rdApiToken && (hasOldCache || !rdStages.length)) {
-    rdStages = [];
-    LS.set('rd_stages', '[]');
-    setTimeout(() => fetchRDStages(), 800);
-  } else {
-    renderRDStages();
-    populateStageTriggerSelect();
-  }
-};
-    <script>...</script>
-
-</body>
-</html>
+})(); // fim do IIFE — nenhuma variável vaza para o escopo global
 </script>
-</body>
-</html>
